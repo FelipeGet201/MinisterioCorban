@@ -8038,7 +8038,7 @@ WHERE b.""Id_Asistente""=@idA AND r.""Id_Usuario""=@uid";
                         SELECT b.""Id_Asistente"", b.""Nombre_Completo"", b.""Edad"", b.""Genero"", 
                                COALESCE(s.""Nombre"", 'Entrada General') as Modalidad,
                                u.""NombreCompleto"" as Inscriptor, u.""Email"", u.""Telefono"",
-                               igl.""nombre"" as Iglesia, mun.""nombre"" as MunicipioNombre, igl.""localidad"", igl.""mapa_url"",
+                               'N/A' as Iglesia, 'N/A' as MunicipioNombre, 'N/A' as localidad, CAST(NULL AS TEXT) as mapa_url,
                                b.""Es_Pagado"",
                                COALESCE(s.""Costo"", e.""Costo_Entrada"") as CostoOficial,
                                
@@ -8065,8 +8065,7 @@ WHERE b.""Id_Asistente""=@idA AND r.""Id_Usuario""=@uid";
                         JOIN ""Eventos_Catalogo"" e ON r.""Id_Evento"" = e.""Id_Evento""
                         JOIN ""Sist_Usuarios"" u ON r.""Id_Usuario"" = u.""Id_Usuario""
                         LEFT JOIN ""Eventos_Subtipos"" s ON b.""Id_Subtipo"" = s.""Id_Subtipo""
-                        LEFT JOIN ""iciar_iglesias"" igl ON u.""Id_Iglesia_Asignada"" = igl.""id""
-                        LEFT JOIN ""iciar_municipios"" mun ON igl.""municipio_id"" = mun.""id""
+
                         WHERE r.""Id_Evento"" = @id ORDER BY b.""Nombre_Completo"" ASC";
 
                         int f2 = 2;

@@ -219,8 +219,8 @@ namespace RedAJP.Controllers
                                     modelo.EsPrivada = (bool)r["Es_Privada"];
                                     modelo.IdGrupoAcceso = r["Id_Grupo_Acceso"] as int?;
 
-                                    // Cargar si solicita iglesia
-                                    modelo.SolicitarIglesia = r["Solicitar_Iglesia"] != DBNull.Value ? (bool)r["Solicitar_Iglesia"] : false;
+                                    // No aplica solicitud de iglesia en este proyecto
+                                    modelo.SolicitarIglesia = false;
 
                                     if (id > 0) // MODO EDICIÓN
                                     {
@@ -397,9 +397,9 @@ namespace RedAJP.Controllers
                             {
                                 string sqlInsert = @"INSERT INTO ""Encuestas_Catalogo"" 
                             (""Titulo"", ""Descripcion"", ""Clave_Url"", ""Activa"", ""Fecha_Limite"", 
-                             ""Es_Privada"", ""Id_Grupo_Acceso"", ""Es_Anonima"", ""Fecha_Creacion"", ""Solicitar_Iglesia"")
+                             ""Es_Privada"", ""Id_Grupo_Acceso"", ""Es_Anonima"", ""Fecha_Creacion"")
                             VALUES 
-                            (@tit, @desc, @url, @act, @lim, @priv, @grp, @anon, NOW(), @solIg) 
+                            (@tit, @desc, @url, @act, @lim, @priv, @grp, @anon, NOW()) 
                             RETURNING ""Id_Encuesta""";
 
                                 using (var cmd = new NpgsqlCommand(sqlInsert, con, trans))
@@ -412,7 +412,6 @@ namespace RedAJP.Controllers
                                     cmd.Parameters.AddWithValue("@priv", modelo.EsPrivada);
                                     cmd.Parameters.AddWithValue("@grp", (object)modelo.IdGrupoAcceso ?? DBNull.Value);
                                     cmd.Parameters.AddWithValue("@anon", modelo.EsAnonima);
-                                    cmd.Parameters.AddWithValue("@solIg", modelo.SolicitarIglesia); // NUEVO
 
                                     idEncuesta = (int)await cmd.ExecuteScalarAsync();
                                 }
@@ -422,8 +421,7 @@ namespace RedAJP.Controllers
                                 string sqlUpdate = @"UPDATE ""Encuestas_Catalogo"" SET 
                             ""Titulo""=@tit, ""Descripcion""=@desc, ""Clave_Url""=@url, 
                             ""Activa""=@act, ""Fecha_Limite""=@lim, 
-                            ""Es_Privada""=@priv, ""Id_Grupo_Acceso""=@grp, ""Es_Anonima""=@anon,
-                            ""Solicitar_Iglesia""=@solIg
+                            ""Es_Privada""=@priv, ""Id_Grupo_Acceso""=@grp, ""Es_Anonima""=@anon
                             WHERE ""Id_Encuesta""=@id";
 
                                 using (var cmd = new NpgsqlCommand(sqlUpdate, con, trans))
@@ -436,7 +434,6 @@ namespace RedAJP.Controllers
                                     cmd.Parameters.AddWithValue("@priv", modelo.EsPrivada);
                                     cmd.Parameters.AddWithValue("@grp", (object)modelo.IdGrupoAcceso ?? DBNull.Value);
                                     cmd.Parameters.AddWithValue("@anon", modelo.EsAnonima);
-                                    cmd.Parameters.AddWithValue("@solIg", modelo.SolicitarIglesia); // NUEVO
                                     cmd.Parameters.AddWithValue("@id", idEncuesta);
 
                                     await cmd.ExecuteNonQueryAsync();
@@ -587,7 +584,7 @@ namespace RedAJP.Controllers
                                 modelo.Titulo = r["Titulo"].ToString();
                                 modelo.Descripcion = r["Descripcion"]?.ToString();
                                 modelo.EsAnonima = (bool)r["Es_Anonima"];
-                                modelo.SolicitarIglesia = r["Solicitar_Iglesia"] != DBNull.Value ? (bool)r["Solicitar_Iglesia"] : false;
+                                modelo.SolicitarIglesia = false;
                                 activa = (bool)r["Activa"];
                                 esPrivada = (bool)r["Es_Privada"];
                                 idGrupoAcceso = r["Id_Grupo_Acceso"] as int?;
@@ -664,32 +661,6 @@ namespace RedAJP.Controllers
                         modelo.RequiereClaveManual = true;
                     }
 
-                    // Cargar lista de iglesias si la encuesta lo requiere ---
-                    if (modelo.SolicitarIglesia)
-                    {
-                        var listaIglesias = new List<dynamic>();
-                        string sqlIglesias = @"
-                            SELECT i.id, i.nombre, m.nombre as municipio, i.localidad 
-                            FROM iciar_iglesias i 
-                            LEFT JOIN iciar_municipios m ON i.municipio_id = m.id 
-                            ORDER BY m.nombre ASC, i.nombre ASC";
-
-                        using (var cmdIg = new NpgsqlCommand(sqlIglesias, con))
-                        using (var rIg = await cmdIg.ExecuteReaderAsync())
-                        {
-                            while (await rIg.ReadAsync())
-                            {
-                                listaIglesias.Add(new
-                                {
-                                    Id = (int)rIg["id"],
-                                    Nombre = rIg["nombre"].ToString(),
-                                    Municipio = rIg["municipio"]?.ToString() ?? "",
-                                    Localidad = rIg["localidad"]?.ToString() ?? "" // <--- AGREGADO AQUÍ
-                                });
-                            }
-                        }
-                        ViewBag.Iglesias = listaIglesias;
-                    }
 
                     // 2. Validaciones de Acceso y Duplicidad
                     bool estaLogueado = User.Identity.IsAuthenticated;
@@ -706,23 +677,7 @@ namespace RedAJP.Controllers
                             modelo.PedirDatosIdentidad = false;
                         }
 
-                        // --- EXTRAER IGLESIA ASIGNADA DEL USUARIO ---
-                        if (idUsuario.HasValue && modelo.SolicitarIglesia)
-                        {
-                            string sqlUserIg = "SELECT \"Id_Iglesia_Asignada\" FROM \"Sist_Usuarios\" WHERE \"Id_Usuario\"=@uid";
-                            using (var cmdUIg = new NpgsqlCommand(sqlUserIg, con))
-                            {
-                                cmdUIg.Parameters.AddWithValue("@uid", idUsuario.Value);
-                                var resIg = await cmdUIg.ExecuteScalarAsync();
-                                if (resIg != null && resIg != DBNull.Value)
-                                {
-                                    if (int.TryParse(resIg.ToString(), out int parsedIgId) && parsedIgId > 0)
-                                    {
-                                        ViewBag.IdIglesiaPreasignada = parsedIgId;
-                                    }
-                                }
-                            }
-                        }
+
 
                         // VALIDACIÓN DE DUPLICIDAD (Solo si no es de asistente o si no se validó ya por asistente)
                         if (!modelo.IdAsistenteEvento.HasValue)
@@ -942,10 +897,7 @@ namespace RedAJP.Controllers
             string tokenAsistente = form["TokenAsistente"];
             string retorno = form["retorno"];
 
-            // Capturar Iglesia Seleccionada si aplica
-            int? idIglesiaSeleccionada = null;
-            if (int.TryParse(form["IdIglesiaSeleccionada"], out int igId))
-                idIglesiaSeleccionada = igId;
+
 
             // Validación Estricta de Email (Regex) si se proporcionó uno
             if (!string.IsNullOrWhiteSpace(emailExt))
@@ -975,9 +927,9 @@ namespace RedAJP.Controllers
                     // ----------------------------------------------------------------------------------
                     // 2. CONTEXTO DE LA ENCUESTA (CARGA Y VALIDACIÓN DE ESTADO)
                     // ----------------------------------------------------------------------------------
-                    var config = new { Activa = false, FechaLimite = (DateTime?)null, EsPrivada = false, IdGrupo = (int?)null, EsAnonima = false, ClaveUrl = "", SolicitarIglesia = false, Titulo = "" };
+                    var config = new { Activa = false, FechaLimite = (DateTime?)null, EsPrivada = false, IdGrupo = (int?)null, EsAnonima = false, ClaveUrl = "", Titulo = "" };
 
-                    string sqlConf = @"SELECT ""Activa"", ""Fecha_Limite"", ""Es_Privada"", ""Id_Grupo_Acceso"", ""Es_Anonima"", ""Clave_Url"", ""Solicitar_Iglesia"", ""Titulo"" 
+                    string sqlConf = @"SELECT ""Activa"", ""Fecha_Limite"", ""Es_Privada"", ""Id_Grupo_Acceso"", ""Es_Anonima"", ""Clave_Url"", ""Titulo"" 
                                FROM ""Encuestas_Catalogo"" WHERE ""Id_Encuesta"" = @id";
 
                     using (var cmd = new NpgsqlCommand(sqlConf, con))
@@ -995,7 +947,6 @@ namespace RedAJP.Controllers
                                     IdGrupo = r["Id_Grupo_Acceso"] as int?,
                                     EsAnonima = (bool)r["Es_Anonima"],
                                     ClaveUrl = r["Clave_Url"].ToString(),
-                                    SolicitarIglesia = r["Solicitar_Iglesia"] != DBNull.Value ? (bool)r["Solicitar_Iglesia"] : false,
                                     Titulo = r["Titulo"]?.ToString() ?? ""
                                 };
                             }
@@ -1019,12 +970,6 @@ namespace RedAJP.Controllers
                         return RedirectToAction("Index", "Home");
                     }
 
-                    // Validación del lado del servidor para la Iglesia
-                    if (config.SolicitarIglesia && !idIglesiaSeleccionada.HasValue)
-                    {
-                        MostrarMensaje("Dato Requerido", "Debes seleccionar a qué iglesia perteneces.", TipoMensaje.Alerta);
-                        return RedirectToAction("Responder", new { clave = config.ClaveUrl });
-                    }
 
                     // Si viene de un asistente de evento, recuperar su nombre y correo si no fueron enviados en el formulario
                     if (idAsistenteEvento.HasValue)
@@ -1302,8 +1247,8 @@ namespace RedAJP.Controllers
 
                             // A. Insertar Encabezado
                             string sqlH = @"INSERT INTO ""Encuestas_Respuestas_Header"" 
-                                  (""Id_Encuesta"", ""Fecha"", ""Id_Usuario"", ""Nombre_Externo"", ""Email_Externo"", ""Id_Iglesia_Seleccionada"", ""Id_Asistente_Evento"") 
-                                  VALUES (@id, NOW(), @uid, @nom, @mail, @idig, @asId) RETURNING ""Id_Respuesta""";
+                                  (""Id_Encuesta"", ""Fecha"", ""Id_Usuario"", ""Nombre_Externo"", ""Email_Externo"", ""Id_Asistente_Evento"") 
+                                  VALUES (@id, NOW(), @uid, @nom, @mail, @asId) RETURNING ""Id_Respuesta""";
 
                             using (var cmd = new NpgsqlCommand(sqlH, con, trans))
                             {
@@ -1311,7 +1256,6 @@ namespace RedAJP.Controllers
                                 cmd.Parameters.AddWithValue("@uid", (object)idUsuario ?? DBNull.Value);
                                 cmd.Parameters.AddWithValue("@nom", (object)nombreExt ?? DBNull.Value);
                                 cmd.Parameters.AddWithValue("@mail", (object)emailExt ?? DBNull.Value);
-                                cmd.Parameters.AddWithValue("@idig", (object)idIglesiaSeleccionada ?? DBNull.Value);
                                 cmd.Parameters.AddWithValue("@asId", (object)idAsistenteEvento ?? DBNull.Value); // NUEVO
                                 idRespuestaGenerada = (int)await cmd.ExecuteScalarAsync();
                             }
@@ -1728,13 +1672,10 @@ namespace RedAJP.Controllers
                 SELECT d.""Id_Detalle"", d.""Id_Pregunta"", d.""Valor_Respuesta"", 
                        h.""Id_Respuesta"", h.""Fecha"", h.""Id_Usuario"",
                        CASE WHEN h.""Id_Usuario"" > 0 THEN u.""NombreCompleto"" ELSE COALESCE(h.""Nombre_Externo"", 'Anónimo') END as ""Autor"",
-                       CASE WHEN h.""Id_Usuario"" > 0 THEN u.""Email"" ELSE COALESCE(h.""Email_Externo"", '') END as ""Email"",
-                       ig.nombre as ""Nombre_Iglesia"", m.nombre as ""Municipio"", ig.localidad as ""Localidad""
+                       CASE WHEN h.""Id_Usuario"" > 0 THEN u.""Email"" ELSE COALESCE(h.""Email_Externo"", '') END as ""Email""
                 FROM ""Encuestas_Respuestas_Header"" h
                 LEFT JOIN ""Encuestas_Respuestas_Detalle"" d ON h.""Id_Respuesta"" = d.""Id_Respuesta""
                 LEFT JOIN ""Sist_Usuarios"" u ON h.""Id_Usuario"" = u.""Id_Usuario""
-                LEFT JOIN iciar_iglesias ig ON h.""Id_Iglesia_Seleccionada"" = ig.id
-                LEFT JOIN iciar_municipios m ON ig.municipio_id = m.id
                 WHERE h.""Id_Encuesta"" = @id
                 ORDER BY h.""Fecha"" DESC";
 
@@ -1762,12 +1703,7 @@ namespace RedAJP.Controllers
                                 if (!modelo.ListaParticipantes.Any(x => x.IdRespuesta == idR))
                                 {
                                     // Procesamos la iglesia con localidad
-                                    string nIglesia = r["Nombre_Iglesia"] != DBNull.Value ? r["Nombre_Iglesia"].ToString() : "";
-                                    string nMunicipio = r["Municipio"] != DBNull.Value ? r["Municipio"].ToString() : "";
-                                    string nLocalidad = r["Localidad"] != DBNull.Value ? r["Localidad"].ToString() : "";
 
-                                    string txtLoc = !string.IsNullOrEmpty(nLocalidad) ? $", {nLocalidad}" : "";
-                                    string iglesiaAsignada = !string.IsNullOrEmpty(nIglesia) ? $"{nIglesia} - {nMunicipio}{txtLoc}" : "No especificada";
 
                                     modelo.ListaParticipantes.Add(new RespuestaHeaderView
                                     {
@@ -1776,7 +1712,7 @@ namespace RedAJP.Controllers
                                         Autor = esAnonima ? $"Participante Anónimo (#{idR})" : r["Autor"].ToString(),
                                         Email = esAnonima ? "Oculto por privacidad" : r["Email"].ToString(),
                                         EsInterno = (r["Id_Usuario"] as int? ?? 0) > 0,
-                                        Iglesia = iglesiaAsignada
+                                        Iglesia = ""
                                     });
                                 }
                             }
@@ -2201,13 +2137,10 @@ namespace RedAJP.Controllers
                        CASE WHEN h.""Id_Usuario"" > 0 THEN u.""Email"" 
                             ELSE COALESCE(h.""Email_Externo"", '') 
                        END as ""Email_Final"",
-                       CASE WHEN h.""Id_Usuario"" > 0 THEN 'Sí' ELSE 'No' END as ""Es_Logueado"",
-                       ig.nombre as ""Nombre_Iglesia"", m.nombre as ""Municipio"", ig.localidad as ""Localidad""
+                       CASE WHEN h.""Id_Usuario"" > 0 THEN 'Sí' ELSE 'No' END as ""Es_Logueado""
                 FROM ""Encuestas_Respuestas_Header"" h
                 LEFT JOIN ""Encuestas_Respuestas_Detalle"" d ON h.""Id_Respuesta"" = d.""Id_Respuesta""
                 LEFT JOIN ""Sist_Usuarios"" u ON h.""Id_Usuario"" = u.""Id_Usuario"" 
-                LEFT JOIN iciar_iglesias ig ON h.""Id_Iglesia_Seleccionada"" = ig.id
-                LEFT JOIN iciar_municipios m ON ig.municipio_id = m.id
                 WHERE h.""Id_Encuesta"" = @id
                 ORDER BY h.""Fecha"" DESC";
 
@@ -2218,12 +2151,7 @@ namespace RedAJP.Controllers
                         {
                             while (await r.ReadAsync())
                             {
-                                string nIglesia = r["Nombre_Iglesia"] != DBNull.Value ? r["Nombre_Iglesia"].ToString() : "";
-                                string nMunicipio = r["Municipio"] != DBNull.Value ? r["Municipio"].ToString() : "";
-                                string nLocalidad = r["Localidad"] != DBNull.Value ? r["Localidad"].ToString() : "";
 
-                                string txtLoc = !string.IsNullOrEmpty(nLocalidad) ? $", {nLocalidad}" : "";
-                                string iglesiaAsignada = !string.IsNullOrEmpty(nIglesia) ? $"{nIglesia} - {nMunicipio}{txtLoc}" : "No especificada";
 
                                 datosPlanos.Add(new
                                 {
@@ -2232,7 +2160,6 @@ namespace RedAJP.Controllers
                                     Nombre = esAnonima ? $"Anónimo #{r["Id_Respuesta"]}" : r["Nombre_Final"].ToString(),
                                     Email = esAnonima ? "Oculto" : r["Email_Final"].ToString(),
                                     EsLogueado = r["Es_Logueado"].ToString(),
-                                    Iglesia = iglesiaAsignada,
                                     IdPregunta = r["Id_Pregunta"] == DBNull.Value ? (int?)null : (int)r["Id_Pregunta"],
                                     Valor = r["Valor_Respuesta"] == DBNull.Value ? "" : r["Valor_Respuesta"].ToString()
                                 });
@@ -2250,7 +2177,6 @@ namespace RedAJP.Controllers
                         ws.Cell(1, col++).Value = "Usuario Logueado";
                         ws.Cell(1, col++).Value = "Participante";
                         ws.Cell(1, col++).Value = "Email";
-                        ws.Cell(1, col++).Value = "Iglesia";
 
                         var mapColumna = new Dictionary<int, int>();
                         foreach (var p in columnasPreguntas)
@@ -2274,7 +2200,6 @@ namespace RedAJP.Controllers
                             ws.Cell(row, 3).Value = (string)header.EsLogueado;
                             ws.Cell(row, 4).Value = (string)header.Nombre;
                             ws.Cell(row, 5).Value = (string)header.Email;
-                            ws.Cell(row, 6).Value = (string)header.Iglesia;
 
                             foreach (var detalle in g)
                             {

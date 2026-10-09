@@ -1041,3 +1041,15 @@ END $$;
 -- 3. Índice para optimizar la verificación instantánea de encuestas
 CREATE INDEX IF NOT EXISTS "IX_Encuestas_Respuestas_Asistente_Evento" 
 ON "Encuestas_Respuestas_Header" ("Id_Encuesta", "Id_Asistente_Evento");
+
+-- 1. Eliminar la columna de configuración en el catálogo de encuestas
+ALTER TABLE "Encuestas_Catalogo" 
+DROP COLUMN IF EXISTS "Solicitar_Iglesia";
+
+-- 2. Eliminar la columna de respuestas donde se guardaba la iglesia
+ALTER TABLE "Encuestas_Respuestas_Header" 
+DROP COLUMN IF EXISTS "Id_Iglesia_Seleccionada";
+
+-- 3. (Opcional) Si también deseas limpiar la columna residual en usuarios:
+ALTER TABLE "Sist_Usuarios" 
+DROP COLUMN IF EXISTS "Id_Iglesia_Asignada";

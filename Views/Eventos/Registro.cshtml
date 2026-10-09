@@ -1038,8 +1038,8 @@
                 @if (tieneHistorial && esGrupal)
                 {
                     <div id="botonAbrirFormulario" class="text-center mb-4 @(iniciarFormularioAbierto ? "oculto" : "")">
-                        <button type="button" class="btn btn-outline-light rounded-pill px-4 fw-bold border-2" onclick="abrirNuevoRegistro()">
-                            <i class="fa-solid fa-plus me-1"></i> Agregar a alguien más
+                        <button type="button" class="btn btn-agregar-asistente" onclick="abrirNuevoRegistro()">
+                            <i class="fa-solid fa-user-plus me-2"></i> Agregar a alguien más
                         </button>
                     </div>
                 }
@@ -2280,7 +2280,6 @@
             new bootstrap.Modal(document.getElementById('modalLectorPDF')).show();
         }
     }
-</script>
 
     function mostrarAlertaEncuestaPendiente(nombre, linkEncuesta) {
         var fullUrl = window.location.origin + linkEncuesta;
@@ -2304,6 +2303,31 @@
             prompt('Copia este enlace de encuesta para ' + nombre + ':', fullUrl);
         });
     }
+</script>
+
+<style>
+    .btn-agregar-asistente {
+        background-color: var(--header-footer, #0A3A35) !important;
+        color: #ffffff !important;
+        border: 2px solid var(--header-footer, #0A3A35) !important;
+        border-radius: 50rem !important;
+        padding: 0.55rem 1.75rem !important;
+        font-weight: 700 !important;
+        box-shadow: 0 4px 12px rgba(10, 58, 53, 0.2) !important;
+        transition: all 0.25s ease-in-out !important;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .btn-agregar-asistente:hover {
+        background-color: var(--primary-dark, #074C40) !important;
+        border-color: var(--primary-dark, #074C40) !important;
+        color: #ffffff !important;
+        transform: translateY(-2px);
+        box-shadow: 0 6px 18px rgba(10, 58, 53, 0.3) !important;
+    }
+</style>
 
 <!-- Librería para generar el QR al vuelo -->
 <script src="~/lib/qrcode/qrcode.min.js"></script>

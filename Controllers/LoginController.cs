@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Authentication;
+﻿using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Mvc;
 using Npgsql;
@@ -67,7 +67,7 @@ namespace RedAJP.Controllers
                     // traemos el password para verificar en C#
                     string sqlUsuario = @"
                 SELECT u.""Email_Verificado"", u.""Id_Usuario"", u.""NombreCompleto"", u.""Email"", 
-                       u.""Id_Rol"", u.""Sello_Seguridad"", u.""PasswordHash"", u.""Id_Iglesia_Asignada"",
+                       u.""Id_Rol"", u.""Sello_Seguridad"", u.""PasswordHash"",
                        r.""Nombre"" as ""Nombre_Rol""
                 FROM ""Sist_Usuarios"" u
                 INNER JOIN ""Sist_Roles"" r ON u.""Id_Rol"" = r.""Id_Rol""
@@ -77,7 +77,7 @@ namespace RedAJP.Controllers
                     string idUser = "", nombre = "", email = "", idRol = "", rol = "", sello = "";
                     bool usuarioEncontrado = false;
                     bool necesitaMigracion = false; // Bandera para detectar usuarios con clave vieja
-                    string idIglesiaAsignada = "";
+                    // idIglesiaAsignada no aplica en este proyecto
 
                     using (var cmd = new NpgsqlCommand(sqlUsuario, conexion))
                     {
@@ -127,7 +127,7 @@ namespace RedAJP.Controllers
                                     email = lector["Email"].ToString();
                                     idRol = lector["Id_Rol"].ToString();
                                     rol = lector["Nombre_Rol"].ToString();
-                                    idIglesiaAsignada = lector["Id_Iglesia_Asignada"]?.ToString();
+                                    // lector Id_Iglesia_Asignada removido
                                 }
                             }
                             else

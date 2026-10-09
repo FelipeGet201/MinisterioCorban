@@ -291,52 +291,6 @@ else
                 </div>
             }
 
-            @if (Model.SolicitarIglesia)
-            {
-                if (ViewBag.IdIglesiaPreasignada != null)
-                {
-                    <input type="hidden" name="IdIglesiaSeleccionada" value="@ViewBag.IdIglesiaPreasignada" required />
-                }
-                else
-                {
-                    <div class="bg-light p-4 rounded-4 border mb-4 text-start" id="contenedorSelectIglesia">
-                        <h6 class="fw-bold text-primary text-uppercase small mb-3"><i class="fa-solid fa-church me-2"></i>¿A qué iglesia perteneces?</h6>
-                        <select id="selectIglesia" name="IdIglesiaSeleccionada" class="form-select form-select-lg border-2" style="width: 100%;" required>
-                            <option value=""></option>
-                            @if (ViewBag.Iglesias != null)
-                            {
-                                foreach (var ig in ViewBag.Iglesias)
-                                {
-                                    string txtLocalidad = !string.IsNullOrEmpty(ig.Localidad) ? $", {ig.Localidad}" : "";
-                                    <option value="@ig.Id">@ig.Nombre - @ig.Municipio@txtLocalidad</option>
-                                }
-                            }
-                        </select>
-                        <div class="text-center mt-2" id="contenedorLinkFaltaIglesia">
-                            <a href="javascript:void(0)" class="text-muted small text-decoration-underline fw-bold" onclick="toggleFaltaIglesia(true)">
-                                ¿Tu iglesia no aparece en la lista?
-                            </a>
-                        </div>
-                    </div>
-                }
-
-                <!-- Mensaje que bloquea el avance -->
-                <div id="msgFaltaIglesia" class="alert border-0 rounded-4 p-4 text-center mb-4 shadow-sm mx-auto" style="display: none; background-color: #fff3cd; color: #856404;">
-                    <div class="mb-3 position-relative d-inline-block">
-                        <i class="fa-solid fa-church fa-2x text-warning"></i>
-                        <i class="fa-solid fa-circle-exclamation text-warning bg-white rounded-circle" style="position: absolute; bottom: -5px; right: -10px; font-size: 1.2rem;"></i>
-                    </div>
-                    <h6 class="fw-bold mb-2">¿Tu iglesia aún no está registrada en la página?</h6>
-                    <p class="small mb-3">
-                        Por favor, <strong>comunícate con un directivo</strong> para solicitar que la registren. Una vez dada de alta, podrás volver para continuar con tu encuesta.
-                    </p>
-                    <button type="button" class="btn btn-sm btn-outline-warning rounded-pill text-dark fw-bold px-4 shadow-sm" onclick="toggleFaltaIglesia(false)">
-                        <i class="fa-solid fa-arrow-left me-1"></i> Entendido, Volver
-                    </button>
-                </div>
-                <!-- =============================================== -->
-            }
-
             <div class="d-grid" id="contenedorBtnComenzar">
                 <button type="button" class="btn btn-dark rounded-pill py-3 fw-bold shadow hover-scale" onclick="nextStep(0)">Comenzar</button>
             </div>
@@ -518,28 +472,6 @@ else
         document.getElementById('txtMensajeError').innerText = mensaje;
         var modal = new bootstrap.Modal(document.getElementById('modalValidacion'));
         modal.show();
-        }
-
-        // --- Alternar la pantalla de "Iglesia no registrada" ---
-        function toggleFaltaIglesia(mostrarMensaje) {
-        var msgBox = document.getElementById('msgFaltaIglesia');
-        var btnComenzarContainer = document.getElementById('contenedorBtnComenzar');
-        var contSelect = document.getElementById('contenedorSelectIglesia');
-        var contLinkFalta = document.getElementById('contenedorLinkFaltaIglesia');
-
-        if (mostrarMensaje) {
-        // Ocultamos la UI de inicio e ingresamos al modo error
-        msgBox.style.display = 'block';
-        btnComenzarContainer.style.display = 'none';
-        if (contSelect) contSelect.style.display = 'none';
-        if (contLinkFalta) contLinkFalta.style.display = 'none';
-        } else {
-        // Restauramos la UI
-        msgBox.style.display = 'none';
-        btnComenzarContainer.style.display = 'block';
-        if (contSelect) contSelect.style.display = 'block';
-        if (contLinkFalta) contLinkFalta.style.display = 'block';
-        }
         }
 
         function nextStep(current) {
@@ -773,25 +705,5 @@ else
         }());
         }
 
-        // Inicializar Select2 cuando jQuery esté listo
-        $(document).ready(function() {
-        if (typeof $ !== 'undefined') {
-        $('#selectIglesia').select2({
-        placeholder: "Selecciona tu iglesia...",
-        allowClear: true,
-        width: '100%',
-        language: {
-        noResults: function() {
-        // Integramos la opción para reportar la falta de iglesia directamente dentro de la búsqueda vacía
-        return "No se encontraron iglesias. <div class='mt-2'><a href='javascript:void(0)' onmousedown='toggleFaltaIglesia(true); return false;' class='text-primary fw-bold text-decoration-underline' style='pointer-events: auto;'>¿Tu iglesia no está registrada? Clic aquí</a></div>";
-        }
-        },
-        escapeMarkup: function (markup) {
-        // Importante para que el HTML dentro del 'noResults' se renderice bien
-        return markup;
-        }
-        });
-        }
-        });
     </script>
 }
