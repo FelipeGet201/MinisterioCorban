@@ -1,4 +1,4 @@
-﻿@model RedAJP.Models.GestionInscritosViewModel
+﻿﻿@model RedAJP.Models.GestionInscritosViewModel
 @{
     Layout = "Principal";
     ViewData["Title"] = "Gestión de Inscritos";
@@ -135,15 +135,41 @@
                                                     <span class="badge bg-danger rounded-pill" style="font-size: 0.6rem;">ABANDONADA</span>
                                                 }
                                             </div>
+
+                                                @if (ViewBag.TieneEncuestaRequisito == true)
+                                                {
+                                                    if (asis.EncuestaRespondida)
+                                                    {
+                                                        <span class="badge bg-success bg-opacity-10 text-success border border-success rounded-pill" style="font-size: 0.65rem;" title="Encuesta contestada">
+                                                            <i class="fa-solid fa-clipboard-check me-1"></i>ENCUESTA OK
+                                                        </span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="badge bg-danger bg-opacity-10 text-danger border border-danger rounded-pill" style="font-size: 0.65rem;" title="Encuesta obligatoria pendiente">
+                                                            <i class="fa-solid fa-clipboard-question me-1"></i>ENCUESTA PENDIENTE
+                                                        </span>
+                                                    }
+                                                }
                                             <div class="mt-1 d-flex flex-wrap align-items-center gap-2">
                                                 <button type="button" class="btn btn-link btn-xs p-0 text-decoration-none" 
                                                         onclick="abrirModalEdicion(@asis.IdAsistente, '@asis.NombreCompleto', @grupo.IdSubtipo, @asis.Edad, '@asis.Genero')">
                                                     <i class="fa-solid fa-user-pen me-1"></i>Editar / Cambiar Modalidad
                                                 </button>
+                                                @if (ViewBag.TieneEncuestaRequisito == true && !asis.EncuestaRespondida)
+                                                {
+                                                    <button type="button" class="btn btn-link btn-xs p-0 text-danger text-decoration-none fw-semibold" 
+                                                            onclick="Swal.fire({ icon: 'warning', title: 'Encuesta Pendiente', text: 'El asistente no ha completado la encuesta requerida. El código QR no puede generarse hasta que la responda.' })">
+                                                        <i class="fa-solid fa-lock me-1"></i>Código QR
+                                                    </button>
+                                                }
+                                                else
+                                                {
                                                 <button type="button" class="btn btn-link btn-xs p-0 text-primary text-decoration-none fw-semibold" 
                                                         onclick="mostrarQRInscrito(@asis.IdAsistente, '@Html.Raw(asis.NombreCompleto.Replace("'", "\\'"))', '@asis.TokenExterno', '@Html.Raw(grupo.NombreModalidad.Replace("'", "\\'"))', @asis.EsPagadoGlobal.ToString().ToLower())">
                                                     <i class="fa-solid fa-qrcode me-1"></i>Código QR
                                                 </button>
+                                                }
                                                 @if (asis.EsAbandonado && !asis.EsPagadoGlobal)
                                                 {
                                                     <button type="button" class="btn btn-link btn-xs p-0 text-danger text-decoration-none fw-bold" onclick="abrirModalBorrarAbandonada(@asis.IdAsistente, '@asis.NombreCompleto')">

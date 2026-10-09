@@ -1,4 +1,4 @@
-﻿@using RedAJP.Globales
+﻿﻿@using RedAJP.Globales
 @model RedAJP.Models.ConfirmarPagoViewModel
 @{
     Layout = "Principal";
@@ -210,9 +210,18 @@
                     <i class="fa-solid fa-shield-halved text-info me-1"></i> Privacidad
                 </button>
             }
+            @if (ViewBag.TieneEncuestaRequisito == true && Model.ListadoPorUsuario != null && Model.ListadoPorUsuario.Any(u => !u.EncuestaRespondida))
+            {
+                <button type="button" class="btn btn-sm bg-white text-danger border border-danger shadow-xs rounded-pill px-3 py-1 fw-semibold small" onclick="mostrarAlertaEncuestaPagar()" title="Encuesta Pendiente (QR Bloqueado)">
+                    <i class="fa-solid fa-lock me-1"></i> Código QR
+                </button>
+            }
+            else
+            {
             <button type="button" class="btn btn-sm bg-white text-dark border shadow-xs rounded-pill px-3 py-1 fw-semibold small" onclick="mostrarQRPagar('@token', '@Html.Raw((Model != null ? Model.TituloEvento : "Evento").Replace("'", "\\'"))', @((Model != null && Model.ListadoPorUsuario != null && Model.ListadoPorUsuario.Any() && Model.ListadoPorUsuario.All(u => u.EstaTotalmentePagado)).ToString().ToLower()))">
                 <i class="fa-solid fa-qrcode text-primary me-1"></i> Código QR
             </button>
+            }
         </div>
     </div>
 
@@ -289,6 +298,21 @@
             </div>
         </div>
 
+        @if (ViewBag.TieneEncuestaRequisito == true && Model.ListadoPorUsuario != null && Model.ListadoPorUsuario.Any(u => !u.EncuestaRespondida))
+        {
+            <div class="alert alert-warning border-0 rounded-4 shadow-sm p-3 mb-4 d-flex align-items-center gap-3">
+                <div class="rounded-circle bg-warning bg-opacity-25 p-3 text-warning-emphasis d-flex align-items-center justify-content-center" style="width: 48px; height: 48px;">
+                    <i class="fa-solid fa-clipboard-question fa-xl"></i>
+                </div>
+                <div>
+                    <h6 class="fw-bold mb-1 text-dark">Encuesta de Asistente Requerida</h6>
+                    <p class="mb-0 text-muted small">
+                        Uno o más asistentes tienen pendiente responder su encuesta. El código QR de acceso y los comprobantes estarán habilitados al completarla.
+                    </p>
+                </div>
+            </div>
+        }
+
         @if (Model.ListadoPorUsuario.Count > 0)
         {
             <div class="row g-4">
@@ -299,6 +323,22 @@
                             <div class="user-header">
                                 <i class="fa-solid fa-user-circle fs-4"></i>
                                 <span class="text-uppercase small">@usuario.NombreAsistente</span>
+                                @if (ViewBag.TieneEncuestaRequisito == true)
+                                {
+                                    if (usuario.EncuestaRespondida)
+                                    {
+                                        <span class="badge bg-success bg-opacity-10 text-success border border-success rounded-pill px-2 py-1 ms-2" style="font-size: 0.68rem;" title="Encuesta respondida">
+                                            <i class="fa-solid fa-clipboard-check me-1"></i> Encuesta Lista
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        var linkEncAsis = Url.Action("Responder", "Encuestas", new { clave = ViewBag.ClaveEncuesta, asis = usuario.IdAsistente, retorno = token });
+                                        <a href="@linkEncAsis" class="badge bg-danger bg-opacity-10 text-danger border border-danger rounded-pill px-2 py-1 ms-2 text-decoration-none" style="font-size: 0.68rem;" title="Clic para contestar encuesta obligatoria">
+                                            <i class="fa-solid fa-clipboard-question me-1"></i> Responder Encuesta
+                                        </a>
+                                    }
+                                }
 
                                 @if (usuario.EstaTotalmentePagado)
                                 {
@@ -872,7 +912,39 @@
 
         new bootstrap.Modal(document.getElementById('modalQRPagar')).show();
     }
+
+    function mostrarAlertaEncuestaPagar() {
+        new bootstrap.Modal(document.getElementById('modalEncuestaPendientePagar')).show();
+    }
 </script>
+
+<!-- Modal Encuesta Pendiente Pagar -->
+<div class="modal fade" id="modalEncuestaPendientePagar" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content rounded-4 border-0 shadow">
+            <div class="modal-header border-0 pb-0">
+                <div class="d-flex align-items-center gap-2">
+                    <div class="rounded-circle bg-warning bg-opacity-10 p-2 text-warning d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
+                        <i class="fa-solid fa-lock fa-lg"></i>
+                    </div>
+                    <h5 class="fw-bold mb-0 text-dark">Encuesta Pendiente</h5>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body py-4 text-center">
+                <p class="text-secondary mb-3">
+                    Para visualizar el <strong>Código QR de Acceso</strong> y descargar comprobantes, todos los asistentes deben responder previamente la encuesta del evento.
+                </p>
+                <div class="alert alert-light border rounded-3 p-3 text-start small mb-0 text-muted">
+                    <i class="fa-solid fa-info-circle me-1"></i> Puedes responder la encuesta haciendo clic en el botón <strong>"Responder Encuesta"</strong> situado junto al nombre de cada asistente.
+                </div>
+            </div>
+            <div class="modal-footer border-0 pt-0">
+                <button type="button" class="btn btn-primary rounded-pill w-100 fw-bold" data-bs-dismiss="modal">Entendido</button>
+            </div>
+        </div>
+    </div>
+</div>
 
 <!-- Librería para generar el QR al vuelo -->
 <script src="~/lib/qrcode/qrcode.min.js"></script>

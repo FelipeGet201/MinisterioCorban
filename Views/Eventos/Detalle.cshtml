@@ -1,4 +1,4 @@
-﻿@using RedAJP.Globales
+﻿﻿@using RedAJP.Globales
 @model RedAJP.Models.DetalleEventoViewModel
 
 @{
@@ -365,20 +365,10 @@
         
                             @if (Model.Evento.HayCupo)
                             {
-                                @if (Model.TieneEncuestaRequisito && !Model.EncuestaYaRespondida && Model.Evento.Tipo_Registro == 1)
-                                {
-                                    <a href="/E/@Model.UrlEncuestaRequisito?evt=@Model.Evento.Id_Encriptado_Evento" 
-                                       class="btn btn-warning rounded-pill px-5 py-3 fw-bold shadow btn-lg text-uppercase btn-inscribirse-detalle text-dark">
-                                        <i class="fa-solid fa-clipboard-question me-2 fa-lg"></i> Encuesta Obligatoria
-                                    </a>
-                                }
-                                else
-                                {
-                                    <a href="@Url.Action("Registro", new { sid = Model.Evento.Id_Encriptado_Evento })" 
-                                       class="btn btn-primary rounded-pill px-5 py-3 fw-bold shadow btn-lg text-uppercase btn-inscribirse-detalle">
-                                        <i class="fa-solid fa-ticket me-2 fa-lg"></i> Inscribirse Ahora
-                                    </a>
-                                }
+                                <a href="@Url.Action("Registro", new { sid = Model.Evento.Id_Encriptado_Evento })" 
+                                   class="btn btn-primary rounded-pill px-5 py-3 fw-bold shadow btn-lg text-uppercase btn-inscribirse-detalle">
+                                    <i class="fa-solid fa-ticket me-2 fa-lg"></i> Inscribirse Ahora
+                                </a>
                             }
                             else
                             {

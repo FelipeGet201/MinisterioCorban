@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 
 namespace RedAJP.Models
@@ -72,6 +72,15 @@ namespace RedAJP.Models
         public bool EsAnonima { get; set; }
         public bool SolicitarIglesia { get; set; }
         public string IdEventoRetorno { get; set; }
+
+        // VinculaciÃ³n por Asistente de Evento
+        public int? IdAsistenteEvento { get; set; }
+        public string TokenAsistente { get; set; }
+        public string NombreAsistente { get; set; }
+        public bool RequiereClaveManual { get; set; }
+        public string ErrorClave { get; set; }
+        public string ClaveUrl { get; set; }
+        public string Retorno { get; set; }
 
 
         public List<PreguntaEncuestaItem> Preguntas { get; set; } = new List<PreguntaEncuestaItem>();

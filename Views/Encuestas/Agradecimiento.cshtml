@@ -1,4 +1,4 @@
-@{
+﻿@{
     Layout = "Principal";
     ViewData["Title"] = "¡Gracias!";
 }
@@ -52,7 +52,14 @@
         }
 
         <div class="d-grid gap-2 col-md-8 mx-auto">
-            @if (ViewBag.IdEventoRetorno != null)
+            @if (!string.IsNullOrEmpty(ViewBag.Retorno as string) || !string.IsNullOrEmpty(ViewBag.TokenAsistente as string))
+            {
+                var tokenRetorno = (ViewBag.Retorno as string) ?? (ViewBag.TokenAsistente as string);
+                <a href="@Url.Action("Pagar", "Eventos", new { token = tokenRetorno })" class="btn btn-success rounded-pill py-3 fw-bold shadow-sm hover-scale transition-fast">
+                    <i class="fa-solid fa-receipt me-2"></i> Ir a Mis Pagos y Comprobantes
+                </a>
+            }
+            else if (ViewBag.IdEventoRetorno != null)
             {
                 <a href="@Url.Action("Detalle", "Eventos", new { sid = ViewBag.IdEventoRetorno })" class="btn btn-primary rounded-pill py-3 fw-bold shadow-sm hover-scale transition-fast">
                     <i class="fa-solid fa-arrow-left me-2"></i> Volver al Evento

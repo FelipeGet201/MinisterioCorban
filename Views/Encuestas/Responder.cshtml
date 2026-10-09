@@ -1,4 +1,4 @@
-@model RedAJP.Models.EncuestaResponderViewModel
+﻿@model RedAJP.Models.EncuestaResponderViewModel
 @{
     Layout = "Principal";
     ViewData["Title"] = Model.Titulo;
@@ -183,6 +183,60 @@
 
 <div class="container py-5 fade-in">
 
+@if (Model.RequiereClaveManual && !Model.IdAsistenteEvento.HasValue)
+{
+    <div class="survey-card active" style="display: block; opacity: 1; transform: translateY(0);">
+        <div class="text-center mb-4">
+            <div class="bg-warning bg-opacity-25 text-warning d-inline-flex p-3 rounded-circle mb-3">
+                <i class="fa-solid fa-id-card fa-3x"></i>
+            </div>
+            <h2 class="fw-bold text-dark">Clave de Asistente Requerida</h2>
+            <p class="text-muted">
+                Esta encuesta corresponde al evento <strong>@Model.Titulo</strong> y es un requisito personal por asistente para emitir tu código QR y comprobantes.
+            </p>
+        </div>
+
+        @if (!string.IsNullOrEmpty(Model.ErrorClave))
+        {
+            <div class="alert alert-danger border-0 rounded-4 p-3 mb-3 small d-flex align-items-center gap-2">
+                <i class="fa-solid fa-circle-exclamation fs-5"></i>
+                <div>@Model.ErrorClave</div>
+            </div>
+        }
+
+        <div class="bg-light p-4 rounded-4 border mb-4">
+            <form method="get" action="@Url.Action("Responder", "Encuestas", new { clave = Model.ClaveUrl ?? ViewContext.RouteData.Values["clave"] })">
+                <input type="hidden" name="retorno" value="@Model.Retorno" />
+                <input type="hidden" name="evt" value="@Model.IdEventoRetorno" />
+                <div class="mb-3 text-start">
+                    <label class="form-label fw-bold text-secondary small">Ingresa tu Número de Asistente:</label>
+                    <div class="input-group input-group-lg">
+                        <span class="input-group-text bg-white border-2 text-muted"><i class="fa-solid fa-hashtag"></i></span>
+                        <input type="number" name="asis" class="form-control border-2 fw-bold text-dark" placeholder="Ej. 42" required autofocus />
+                    </div>
+                    <small class="text-muted mt-2 d-block">
+                        <i class="fa-solid fa-circle-info me-1"></i> Puedes consultar este número en tu comprobante o solicitarlo a la persona que realizó tu inscripción.
+                    </small>
+                </div>
+                <button type="submit" class="btn btn-warning w-100 py-3 rounded-pill fw-bold text-dark shadow-sm">
+                    Ingresar a la Encuesta <i class="fa-solid fa-arrow-right ms-2"></i>
+                </button>
+            </form>
+        </div>
+
+        @if (!string.IsNullOrEmpty(Model.Retorno))
+        {
+            <div class="text-center">
+                <a href="@Url.Action("Pagar", "Eventos", new { token = Model.Retorno })" class="text-decoration-none small text-muted fw-bold">
+                    <i class="fa-solid fa-arrow-left me-1"></i> Regresar al Estado de Cuenta
+                </a>
+            </div>
+        }
+    </div>
+}
+else
+{
+
     <div class="progress-track" id="trackBar"><div class="progress-fill" id="progressBar"></div></div>
 
     <form id="surveyForm" method="post" action="@Url.Action("Finalizar")" enctype="multipart/form-data">
@@ -190,12 +244,23 @@
         <input type="hidden" name="IdEncuesta" value="@Model.Id" />
         <input type="hidden" name="ClaveUrl" value="@ViewContext.RouteData.Values["clave"]" />
         <input type="hidden" name="evt" value="@Model.IdEventoRetorno" />
+        <input type="hidden" name="IdAsistenteEvento" value="@Model.IdAsistenteEvento" />
+        <input type="hidden" name="TokenAsistente" value="@Model.TokenAsistente" />
+        <input type="hidden" name="retorno" value="@Model.Retorno" />
 
         <div class="survey-card active" id="step-0">
             <div class="text-center mb-4">
                 <h1 class="fw-bold text-dark">@Model.Titulo</h1>
                 <p class="text-muted fs-5">@Model.Descripcion</p>
             </div>
+
+            @if (Model.IdAsistenteEvento.HasValue)
+            {
+                <div class="alert alert-primary border-0 rounded-4 text-center mb-4 py-2">
+                    <i class="fa-solid fa-user-check me-2"></i>
+                    Asistente: <strong>@(string.IsNullOrEmpty(Model.NombreAsistente) ? $"#{Model.IdAsistenteEvento}" : Model.NombreAsistente)</strong>
+                </div>
+            }
 
             @if (Model.PedirDatosIdentidad)
             {
@@ -420,6 +485,7 @@
         </div>
 
     </form>
+}
 </div>
 
 <div class="modal fade" id="modalValidacion" tabindex="-1" aria-hidden="true">

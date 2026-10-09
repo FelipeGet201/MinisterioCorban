@@ -1744,6 +1744,7 @@ namespace RedAJP.Controllers
                     // 2. VALIDACIÓN DE ENCUESTA REQUISITO
                     int tipoRegistroValidacion = 1;
                     int idEncuestaRequisito = 0;
+                    string urlEncuesta = "";
 
                     using (var cmdEv = new NpgsqlCommand("SELECT \"Tipo_Registro\", \"Id_Encuesta_Requisito\" FROM \"Eventos_Catalogo\" WHERE \"Id_Evento\" = @id", conexion))
                     {
@@ -1763,31 +1764,22 @@ namespace RedAJP.Controllers
                         }
                     }
 
-                    if (idEncuestaRequisito > 0 && tipoRegistroValidacion == 1) // Solo aplica para individual
+                    if (idEncuestaRequisito > 0)
                     {
-                        using (var cmdResp = new NpgsqlCommand("SELECT COUNT(1) FROM \"Encuestas_Respuestas_Header\" WHERE \"Id_Encuesta\" = @idEnc AND \"Id_Usuario\" = @idUsr", conexion))
+                        using (var cmdUrl = new NpgsqlCommand("SELECT \"Clave_Url\" FROM \"Encuestas_Catalogo\" WHERE \"Id_Encuesta\" = @idEnc", conexion))
                         {
-                            cmdResp.Parameters.AddWithValue("@idEnc", idEncuestaRequisito);
-                            cmdResp.Parameters.AddWithValue("@idUsr", idUser);
-                            long numResp = (long)await cmdResp.ExecuteScalarAsync();
-                            if (numResp == 0)
+                            cmdUrl.Parameters.AddWithValue("@idEnc", idEncuestaRequisito);
+                            var resultUrl = await cmdUrl.ExecuteScalarAsync();
+                            if (resultUrl != null && resultUrl != DBNull.Value)
                             {
-                                string urlEncuesta = "";
-                                using (var cmdUrl = new NpgsqlCommand("SELECT \"Clave_Url\" FROM \"Encuestas_Catalogo\" WHERE \"Id_Encuesta\" = @idEnc", conexion))
-                                {
-                                    cmdUrl.Parameters.AddWithValue("@idEnc", idEncuestaRequisito);
-                                    var resultUrl = await cmdUrl.ExecuteScalarAsync();
-                                    if (resultUrl != null && resultUrl != DBNull.Value)
-                                    {
-                                        urlEncuesta = resultUrl.ToString();
-                                    }
-                                }
-
-                                MostrarMensaje("Encuesta Requerida", "Para continuar con tu inscripción a este evento, primero debes responder esta encuesta.", TipoMensaje.Alerta);
-                                return Redirect($"/E/{urlEncuesta}?evt={sid}");
+                                urlEncuesta = resultUrl.ToString();
                             }
                         }
                     }
+
+                    ViewBag.TieneEncuestaRequisito = idEncuestaRequisito > 0;
+                    ViewBag.UrlEncuesta = urlEncuesta;
+                    ViewBag.IdEncuestaRequisito = idEncuestaRequisito;
 
                     // 3. DATOS EVENTO Y SUBTIPOS UNIFICADOS
                     var disponibilidad = await ConsultarDisponibilidadEvento(id, conexion);
@@ -1869,6 +1861,9 @@ namespace RedAJP.Controllers
                     string sqlHist = @"
                     SELECT b.""Id_Asistente"", b.""Nombre_Completo"", b.""Etiqueta_Grupo"", b.""Edad"", b.""Genero"", b.""Es_Pagado"", b.""Id_Subtipo"",
                            b.""Token_Pago_Externo"",
+                           COALESCE((SELECT COUNT(1) FROM ""Encuestas_Respuestas_Header"" h 
+                                     WHERE h.""Id_Encuesta"" = @idEncReq 
+                                       AND h.""Id_Asistente_Evento"" = b.""Id_Asistente""), 0) > 0 AS ""EncuestaRespondida"",
                            (SELECT COALESCE(SUM(""Total""), 0) FROM ""Eventos_Asistentes_ProductosExtra"" WHERE ""Id_Asistente"" = b.""Id_Asistente"") as ""TotalExtras"",
                            s.""Nombre"" as ""NomSub"", s.""Costo"" as ""CostoSub"",
                            (SELECT COUNT(*) FROM ""Eventos_C_Cuentas_Cobrar"" c WHERE c.""Id_Asistente"" = b.""Id_Asistente"" AND c.""Pagado"" = TRUE) as ""PagosHechos"",
@@ -1901,6 +1896,7 @@ namespace RedAJP.Controllers
                     {
                         cmd.Parameters.AddWithValue("@id", id);
                         cmd.Parameters.AddWithValue("@uid", idUser);
+                        cmd.Parameters.AddWithValue("@idEncReq", idEncuestaRequisito);
                         using (var r = await cmd.ExecuteReaderAsync())
                         {
                             while (await r.ReadAsync())
@@ -1923,6 +1919,7 @@ namespace RedAJP.Controllers
                                     EstatusTransaccion = r["StTrx"]?.ToString(),
                                     IdTransaccionPendiente = r["IdTrxPendiente"] != DBNull.Value ? (int)r["IdTrxPendiente"] : 0,
                                     TokenExterno = r["Token_Pago_Externo"] != DBNull.Value ? r["Token_Pago_Externo"].ToString() : null,
+                                    EncuestaRespondida = idEncuestaRequisito > 0 ? (bool)r["EncuestaRespondida"] : true,
 
                                     PagosRealizados = Convert.ToInt32(r["PagosHechos"]),
                                     TotalPagosCalendario = Convert.ToInt32(r["TotalPagos"]),
@@ -3154,7 +3151,12 @@ WHERE b.""Id_Asistente""=@idA AND r.""Id_Usuario""=@uid";
                     await conexion.OpenAsync();
 
                     // D.1 Datos del Evento
-                    string sqlEv = @"SELECT ""Titulo"", ""Fecha_Inicio"", ""Permitir_Pago"", ""Permitir_Transferencia"", ""Permitir_Pago_Tarjeta"", ""Cobrar_Comision_Extra"", ""Imagen_Url"" FROM ""Eventos_Catalogo"" WHERE ""Id_Evento"" = @ev";
+                    int idEncRequisitoPagar = 0;
+                    string claveEncuestaPagar = "";
+                    string sqlEv = @"SELECT ""Titulo"", ""Fecha_Inicio"", ""Permitir_Pago"", ""Permitir_Transferencia"", ""Permitir_Pago_Tarjeta"", ""Cobrar_Comision_Extra"", ""Imagen_Url"",
+                                            ""Id_Encuesta_Requisito"",
+                                            (SELECT enc.""Clave_Url"" FROM ""Encuestas_Catalogo"" enc WHERE enc.""Id_Encuesta"" = ""Eventos_Catalogo"".""Id_Encuesta_Requisito"") as ""ClaveEncuesta""
+                                     FROM ""Eventos_Catalogo"" WHERE ""Id_Evento"" = @ev";
                     using (var cmd = new NpgsqlCommand(sqlEv, conexion))
                     {
                         cmd.Parameters.AddWithValue("@ev", idEvento);
@@ -3168,6 +3170,12 @@ WHERE b.""Id_Asistente""=@idA AND r.""Id_Usuario""=@uid";
                                 ViewBag.EsTransferencia = r["Permitir_Transferencia"] != DBNull.Value && (bool)r["Permitir_Transferencia"];
                                 ViewBag.PermitirTarjeta = r["Permitir_Pago_Tarjeta"] != DBNull.Value ? (bool)r["Permitir_Pago_Tarjeta"] : true;
                                 modelo.CobrarComisionExtra = r["Cobrar_Comision_Extra"] != DBNull.Value ? (bool)r["Cobrar_Comision_Extra"] : true;
+
+                                if (r["Id_Encuesta_Requisito"] != DBNull.Value) idEncRequisitoPagar = Convert.ToInt32(r["Id_Encuesta_Requisito"]);
+                                claveEncuestaPagar = r["ClaveEncuesta"]?.ToString();
+                                ViewBag.TieneEncuestaRequisito = idEncRequisitoPagar > 0;
+                                ViewBag.ClaveEncuesta = claveEncuestaPagar;
+                                ViewBag.IdEncuestaRequisito = idEncRequisitoPagar;
 
                                 // Pasamos la imagen a la vista para el efecto de la tarjeta difuminada
                                 ViewBag.ImagenEvento = r["Imagen_Url"]?.ToString();
@@ -3184,13 +3192,17 @@ WHERE b.""Id_Asistente""=@idA AND r.""Id_Usuario""=@uid";
                     // D.2 Carga de Personas y Deudas
                     var personas = new List<AgrupacionDeudaUsuario>();
                     // Modificar la consulta SQL para traer Token_Pago_Externo
-                    string sqlNombres = @"SELECT ""Id_Asistente"", ""Nombre_Completo"", ""Token_Pago_Externo"" 
-                      FROM ""Eventos_B_Asistentes"" 
-                      WHERE ""Id_Asistente"" = ANY(@ids)";
+                    string sqlNombres = @"SELECT b.""Id_Asistente"", b.""Nombre_Completo"", b.""Token_Pago_Externo"",
+                                                 COALESCE((SELECT COUNT(1) FROM ""Encuestas_Respuestas_Header"" h 
+                                                           WHERE h.""Id_Encuesta"" = @idEnc 
+                                                             AND h.""Id_Asistente_Evento"" = b.""Id_Asistente""), 0) > 0 AS ""EncuestaRespondida""
+                                          FROM ""Eventos_B_Asistentes"" b 
+                                          WHERE b.""Id_Asistente"" = ANY(@ids)";
 
                     using (var cmd = new NpgsqlCommand(sqlNombres, conexion))
                     {
                         cmd.Parameters.AddWithValue("@ids", idsAsistentesAConsultar);
+                        cmd.Parameters.AddWithValue("@idEnc", idEncRequisitoPagar);
                         using (var r = await cmd.ExecuteReaderAsync())
                         {
                             while (await r.ReadAsync())
@@ -3198,8 +3210,10 @@ WHERE b.""Id_Asistente""=@idA AND r.""Id_Usuario""=@uid";
                                 personas.Add(new AgrupacionDeudaUsuario
                                 {
                                     IdRegistro = (int)r["Id_Asistente"],
+                                    IdAsistente = (int)r["Id_Asistente"],
                                     NombreAsistente = r["Nombre_Completo"].ToString(),
-                                    TokenExterno = r["Token_Pago_Externo"].ToString() // <--- ASIGNARLO AQUÍ
+                                    TokenExterno = r["Token_Pago_Externo"].ToString(),
+                                    EncuestaRespondida = idEncRequisitoPagar > 0 ? (bool)r["EncuestaRespondida"] : true
                                 });
                             }
                         }
@@ -3846,6 +3860,12 @@ WHERE b.""Id_Asistente""=@idA AND r.""Id_Usuario""=@uid";
                 SELECT 
                     e.""Titulo"", 
                     b.""Nombre_Completo"", 
+                    b.""Id_Asistente"",
+                    e.""Id_Encuesta_Requisito"",
+                    (SELECT enc.""Clave_Url"" FROM ""Encuestas_Catalogo"" enc WHERE enc.""Id_Encuesta"" = e.""Id_Encuesta_Requisito"") as ""ClaveEncuesta"",
+                    COALESCE((SELECT COUNT(1) FROM ""Encuestas_Respuestas_Header"" h 
+                              WHERE h.""Id_Encuesta"" = e.""Id_Encuesta_Requisito"" 
+                                AND h.""Id_Asistente_Evento"" = b.""Id_Asistente""), 0) > 0 AS ""EncuestaRespondida"",
                     s.""Nombre"" as ""Modalidad"",
                     CASE 
                         WHEN cal.""Numero_Pago"" <= -10000 AND pe.""Cantidad"" > 1 THEN 
@@ -3893,6 +3913,16 @@ WHERE b.""Id_Asistente""=@idA AND r.""Id_Usuario""=@uid";
                         {
                             if (await r.ReadAsync())
                             {
+                                int idEncReqRecibo = r["Id_Encuesta_Requisito"] != DBNull.Value ? Convert.ToInt32(r["Id_Encuesta_Requisito"]) : 0;
+                                bool encRespRecibo = (bool)r["EncuestaRespondida"];
+                                string claveEncRecibo = r["ClaveEncuesta"]?.ToString();
+                                int idAsisRecibo = (int)r["Id_Asistente"];
+
+                                if (idEncReqRecibo > 0 && !encRespRecibo && !string.IsNullOrEmpty(claveEncRecibo))
+                                {
+                                    return Redirect($"/E/{claveEncRecibo}?asis={idAsisRecibo}&retorno={token}");
+                                }
+
                                 modelo.Evento = r["Titulo"].ToString();
                                 modelo.Asistente = r["Nombre_Completo"].ToString();
                                 modelo.Modalidad = r["Modalidad"] != DBNull.Value ? r["Modalidad"].ToString() : "Entrada General";
@@ -3957,7 +3987,12 @@ WHERE b.""Id_Asistente""=@idA AND r.""Id_Usuario""=@uid";
 
                     // 1. Validar Asistente y Token (Se agregó el JOIN a Subtipos)
                     string sqlInfo = @"
-                SELECT e.""Titulo"", b.""Nombre_Completo"", s.""Nombre"" as ""Modalidad""
+                SELECT e.""Titulo"", b.""Nombre_Completo"", s.""Nombre"" as ""Modalidad"",
+                       e.""Id_Encuesta_Requisito"",
+                       (SELECT enc.""Clave_Url"" FROM ""Encuestas_Catalogo"" enc WHERE enc.""Id_Encuesta"" = e.""Id_Encuesta_Requisito"") as ""ClaveEncuesta"",
+                       COALESCE((SELECT COUNT(1) FROM ""Encuestas_Respuestas_Header"" h 
+                                 WHERE h.""Id_Encuesta"" = e.""Id_Encuesta_Requisito"" 
+                                   AND h.""Id_Asistente_Evento"" = b.""Id_Asistente""), 0) > 0 AS ""EncuestaRespondida""
                 FROM ""Eventos_B_Asistentes"" b
                 JOIN ""Eventos_A_Registros"" r ON b.""Id_Registro"" = r.""Id_Registro""
                 JOIN ""Eventos_Catalogo"" e ON r.""Id_Evento"" = e.""Id_Evento""
@@ -3972,6 +4007,15 @@ WHERE b.""Id_Asistente""=@idA AND r.""Id_Usuario""=@uid";
                         {
                             if (await r.ReadAsync())
                             {
+                                int idEncReqGeneral = r["Id_Encuesta_Requisito"] != DBNull.Value ? Convert.ToInt32(r["Id_Encuesta_Requisito"]) : 0;
+                                bool encRespGeneral = (bool)r["EncuestaRespondida"];
+                                string claveEncGeneral = r["ClaveEncuesta"]?.ToString();
+
+                                if (idEncReqGeneral > 0 && !encRespGeneral && !string.IsNullOrEmpty(claveEncGeneral))
+                                {
+                                    return Redirect($"/E/{claveEncGeneral}?asis={idAsistente}&retorno={token}");
+                                }
+
                                 modelo.Evento = r["Titulo"].ToString();
                                 modelo.Asistente = r["Nombre_Completo"].ToString();
                                 modelo.Modalidad = r["Modalidad"] != DBNull.Value ? r["Modalidad"].ToString() : "Entrada General";
@@ -4337,8 +4381,19 @@ WHERE b.""Id_Asistente""=@idA AND r.""Id_Usuario""=@uid";
                             // B. Borrar Cuentas / Deudas (C)
                             await new NpgsqlCommand($"DELETE FROM \"Eventos_C_Cuentas_Cobrar\" WHERE \"Id_Asistente\"={idAsistente}", conexion, trans).ExecuteNonQueryAsync();
 
-                            // C. Borrar Respuestas a las preguntas
+                            // C. Borrar Respuestas a las preguntas y encuesta resuelta
                             await new NpgsqlCommand($"DELETE FROM \"Eventos_Respuestas\" WHERE \"Id_Asistente\"={idAsistente}", conexion, trans).ExecuteNonQueryAsync();
+
+                            string sqlDelEnc = @"
+                                DELETE FROM ""Encuestas_Respuestas_Detalle"" 
+                                WHERE ""Id_Respuesta"" IN (SELECT ""Id_Respuesta"" FROM ""Encuestas_Respuestas_Header"" WHERE ""Id_Asistente_Evento"" = @idA);
+                                DELETE FROM ""Encuestas_Respuestas_Header"" 
+                                WHERE ""Id_Asistente_Evento"" = @idA;";
+                            using (var cmdDelEnc = new NpgsqlCommand(sqlDelEnc, conexion, trans))
+                            {
+                                cmdDelEnc.Parameters.AddWithValue("@idA", idAsistente);
+                                await cmdDelEnc.ExecuteNonQueryAsync();
+                            }
 
                             // D. Borrar Asignaciones de Alojamiento y Prioridades
                             await new NpgsqlCommand($"DELETE FROM \"Eventos_I_Alojamiento_Asignaciones\" WHERE \"Id_Asistente\"={idAsistente}", conexion, trans).ExecuteNonQueryAsync();
@@ -4426,6 +4481,8 @@ WHERE b.""Id_Asistente""=@idA AND r.""Id_Usuario""=@uid";
 
                             // 4. Borrar Respuestas
                             await new NpgsqlCommand($"DELETE FROM \"Eventos_Respuestas\" WHERE \"Id_Asistente\" IN (SELECT \"Id_Asistente\" FROM \"Eventos_B_Asistentes\" WHERE \"Id_Registro\" IN (SELECT \"Id_Registro\" FROM \"Eventos_A_Registros\" WHERE \"Id_Evento\"={id}))", conexion, trans).ExecuteNonQueryAsync();
+                            await new NpgsqlCommand($"DELETE FROM \"Encuestas_Respuestas_Detalle\" WHERE \"Id_Respuesta\" IN (SELECT \"Id_Respuesta\" FROM \"Encuestas_Respuestas_Header\" WHERE \"Id_Asistente_Evento\" IN (SELECT \"Id_Asistente\" FROM \"Eventos_B_Asistentes\" WHERE \"Id_Registro\" IN (SELECT \"Id_Registro\" FROM \"Eventos_A_Registros\" WHERE \"Id_Evento\"={id})))", conexion, trans).ExecuteNonQueryAsync();
+                            await new NpgsqlCommand($"DELETE FROM \"Encuestas_Respuestas_Header\" WHERE \"Id_Asistente_Evento\" IN (SELECT \"Id_Asistente\" FROM \"Eventos_B_Asistentes\" WHERE \"Id_Registro\" IN (SELECT \"Id_Registro\" FROM \"Eventos_A_Registros\" WHERE \"Id_Evento\"={id}))", conexion, trans).ExecuteNonQueryAsync();
 
                             // 5. Borrar Asistentes (B)
                             await new NpgsqlCommand($"DELETE FROM \"Eventos_Asistentes_ProductosExtra\" WHERE \"Id_Asistente\" IN (SELECT \"Id_Asistente\" FROM \"Eventos_B_Asistentes\" WHERE \"Id_Registro\" IN (SELECT \"Id_Registro\" FROM \"Eventos_A_Registros\" WHERE \"Id_Evento\"={id}))", conexion, trans).ExecuteNonQueryAsync();
@@ -7364,6 +7421,16 @@ WHERE b.""Id_Asistente""=@idA AND r.""Id_Usuario""=@uid";
 
                             // 3. BORRADO EN CASCADA MANUAL
                             await new NpgsqlCommand($"DELETE FROM \"Eventos_Respuestas\" WHERE \"Id_Asistente\" = {idAsistente}", conexion, trans).ExecuteNonQueryAsync();
+                            string sqlDelEncAbandonada = @"
+                                DELETE FROM ""Encuestas_Respuestas_Detalle"" 
+                                WHERE ""Id_Respuesta"" IN (SELECT ""Id_Respuesta"" FROM ""Encuestas_Respuestas_Header"" WHERE ""Id_Asistente_Evento"" = @idA);
+                                DELETE FROM ""Encuestas_Respuestas_Header"" 
+                                WHERE ""Id_Asistente_Evento"" = @idA;";
+                            using (var cmdDelEnc = new NpgsqlCommand(sqlDelEncAbandonada, conexion, trans))
+                            {
+                                cmdDelEnc.Parameters.AddWithValue("@idA", idAsistente);
+                                await cmdDelEnc.ExecuteNonQueryAsync();
+                            }
                             await new NpgsqlCommand($"DELETE FROM \"Eventos_I_Alojamiento_Asignaciones\" WHERE \"Id_Asistente\" = {idAsistente}", conexion, trans).ExecuteNonQueryAsync();
                             await new NpgsqlCommand($"DELETE FROM \"Eventos_J_Prioridad_Alojamiento\" WHERE \"Id_Asistente\" = {idAsistente}", conexion, trans).ExecuteNonQueryAsync();
                             await new NpgsqlCommand($"DELETE FROM \"Eventos_C_Cuentas_Cobrar\" WHERE \"Id_Asistente\" = {idAsistente}", conexion, trans).ExecuteNonQueryAsync();
@@ -7418,9 +7485,20 @@ WHERE b.""Id_Asistente""=@idA AND r.""Id_Usuario""=@uid";
                 {
                     await conexion.OpenAsync();
 
-                    var cmdEv = new NpgsqlCommand(@"SELECT ""Titulo"" FROM ""Eventos_Catalogo"" WHERE ""Id_Evento"" = @id", conexion);
-                    cmdEv.Parameters.AddWithValue("@id", idEvento);
-                    modelo.TituloEvento = (string)await cmdEv.ExecuteScalarAsync();
+                    int idEncReqInscritos = 0;
+                    using (var cmdEv = new NpgsqlCommand(@"SELECT ""Titulo"", ""Id_Encuesta_Requisito"" FROM ""Eventos_Catalogo"" WHERE ""Id_Evento"" = @id", conexion))
+                    {
+                        cmdEv.Parameters.AddWithValue("@id", idEvento);
+                        using (var rEv = await cmdEv.ExecuteReaderAsync())
+                        {
+                            if (await rEv.ReadAsync())
+                            {
+                                modelo.TituloEvento = rEv["Titulo"].ToString();
+                                if (rEv["Id_Encuesta_Requisito"] != DBNull.Value) idEncReqInscritos = Convert.ToInt32(rEv["Id_Encuesta_Requisito"]);
+                            }
+                        }
+                    }
+                    ViewBag.TieneEncuestaRequisito = idEncReqInscritos > 0;
 
                     var todasModalidades = new List<SubtipoEventoItem>();
                     string sqlCat = @"SELECT ""Id_Subtipo"", ""Nombre"", ""Costo"" FROM ""Eventos_Subtipos"" WHERE ""Id_Evento"" = @id AND ""Activo"" = TRUE ORDER BY ""Costo"" ASC, ""Nombre"" ASC";
@@ -7442,6 +7520,9 @@ WHERE b.""Id_Asistente""=@idA AND r.""Id_Usuario""=@uid";
                         COALESCE(s.""Id_Subtipo"", 0) as ""IdSubtipo"",
                         COALESCE(s.""Nombre"", 'Entrada General') as ""Modalidad"",
                         b.""Id_Asistente"", b.""Nombre_Completo"", b.""Genero"", b.""Edad"", b.""Es_Pagado"" as ""EsPagadoGlobal"", b.""Token_Pago_Externo"" as ""TokenExterno"",
+                        COALESCE((SELECT COUNT(1) FROM ""Encuestas_Respuestas_Header"" h 
+                                  WHERE h.""Id_Encuesta"" = @idEncReq 
+                                    AND h.""Id_Asistente_Evento"" = b.""Id_Asistente""), 0) > 0 AS ""EncuestaRespondida"",
                         r.""Fecha_Registro"", c.""Id_Cuenta"", c.""Monto_Pagar"", c.""Pagado"", c.""Fecha_Pagado"",
                         CASE 
                             WHEN cal.""Numero_Pago"" <= -10000 THEN 
@@ -7486,6 +7567,7 @@ WHERE b.""Id_Asistente""=@idA AND r.""Id_Usuario""=@uid";
                     using (var cmd = new NpgsqlCommand(sql, conexion))
                     {
                         cmd.Parameters.AddWithValue("@id", idEvento);
+                        cmd.Parameters.AddWithValue("@idEncReq", idEncReqInscritos);
                         using (var r = await cmd.ExecuteReaderAsync())
                         {
                             while (await r.ReadAsync())
@@ -7510,7 +7592,8 @@ WHERE b.""Id_Asistente""=@idA AND r.""Id_Usuario""=@uid";
                                         TotalCuentasAsignadas = r["TotalCuentas"] != DBNull.Value ? Convert.ToDecimal(r["TotalCuentas"]) : 0,
                                         TieneAjusteFinanciero = Convert.ToInt32(r["CantidadAjustes"]) > 0, // <--- DETECTA TRASPASO TIPO 2
                                         EsPagadoGlobal = (bool)r["EsPagadoGlobal"],
-                                        EsAbandonado = Convert.ToInt32(r["TotalIntentos"]) == 0
+                                        EsAbandonado = Convert.ToInt32(r["TotalIntentos"]) == 0,
+                                        EncuestaRespondida = idEncReqInscritos > 0 ? (bool)r["EncuestaRespondida"] : true
                                     };
                                     grupo.Asistentes.Add(asistente);
                                 }
@@ -8962,6 +9045,16 @@ WHERE b.""Id_Asistente""=@idA AND r.""Id_Usuario""=@uid";
 
                             // Borrar Respuestas dinámicas
                             await new NpgsqlCommand($"DELETE FROM \"Eventos_Respuestas\" WHERE \"Id_Asistente\"={idAsistente}", conexion, trans).ExecuteNonQueryAsync();
+                            string sqlDelEncExterno = @"
+                                DELETE FROM ""Encuestas_Respuestas_Detalle"" 
+                                WHERE ""Id_Respuesta"" IN (SELECT ""Id_Respuesta"" FROM ""Encuestas_Respuestas_Header"" WHERE ""Id_Asistente_Evento"" = @idA);
+                                DELETE FROM ""Encuestas_Respuestas_Header"" 
+                                WHERE ""Id_Asistente_Evento"" = @idA;";
+                            using (var cmdDelEnc = new NpgsqlCommand(sqlDelEncExterno, conexion, trans))
+                            {
+                                cmdDelEnc.Parameters.AddWithValue("@idA", idAsistente);
+                                await cmdDelEnc.ExecuteNonQueryAsync();
+                            }
 
                             // Borrar Asistente (Tabla B)
                             await new NpgsqlCommand($"DELETE FROM \"Eventos_Asistentes_ProductosExtra\" WHERE \"Id_Asistente\"={idAsistente}", conexion, trans).ExecuteNonQueryAsync();
@@ -11957,6 +12050,17 @@ WHERE b.""Id_Asistente""=@idA AND r.""Id_Usuario""=@uid";
                     await cmdR.ExecuteNonQueryAsync();
                 }
 
+                string sqlDelEncMasivo = @"
+                    DELETE FROM ""Encuestas_Respuestas_Detalle"" 
+                    WHERE ""Id_Respuesta"" IN (SELECT ""Id_Respuesta"" FROM ""Encuestas_Respuestas_Header"" WHERE ""Id_Asistente_Evento"" = ANY(@ids));
+                    DELETE FROM ""Encuestas_Respuestas_Header"" 
+                    WHERE ""Id_Asistente_Evento"" = ANY(@ids);";
+                using (var cmdDelEnc = new NpgsqlCommand(sqlDelEncMasivo, conexion, trans))
+                {
+                    cmdDelEnc.Parameters.AddWithValue("@ids", idsABorrar.ToArray());
+                    await cmdDelEnc.ExecuteNonQueryAsync();
+                }
+
                 // C1. Borrar Productos Extra del Asistente
                 string sqlDelPE = @"DELETE FROM ""Eventos_Asistentes_ProductosExtra"" WHERE ""Id_Asistente"" = ANY(@ids)";
                 using (var cmdPE = new NpgsqlCommand(sqlDelPE, conexion, trans))
@@ -14254,6 +14358,10 @@ WHERE b.""Id_Asistente""=@idA AND r.""Id_Usuario""=@uid";
                     string sql = $@"
                         SELECT b.""Id_Asistente"", b.""Nombre_Completo"", COALESCE(s.""Nombre"", 'Entrada General') as ""Modalidad"",
                                {sqlAsistencia},
+                               e.""Id_Encuesta_Requisito"",
+                               COALESCE((SELECT COUNT(1) FROM ""Encuestas_Respuestas_Header"" h 
+                                         WHERE h.""Id_Encuesta"" = e.""Id_Encuesta_Requisito"" 
+                                           AND h.""Id_Asistente_Evento"" = b.""Id_Asistente""), 0) > 0 AS ""EncuestaRespondida"",
                                (SELECT string_agg(c_pe.""Nombre_Producto"" || ' (x' || pe.""Cantidad"" || ')' || CASE WHEN c_pe.""Descripcion"" IS NOT NULL AND c_pe.""Descripcion"" <> '' THEN ' - ' || c_pe.""Descripcion"" ELSE '' END, ', ') 
                                 FROM ""Eventos_Asistentes_ProductosExtra"" pe 
                                 JOIN ""Eventos_Catalogo_ProductosExtra"" c_pe ON pe.""Id_ProductoExtra"" = c_pe.""Id_ProductoExtra""
@@ -14267,6 +14375,7 @@ WHERE b.""Id_Asistente""=@idA AND r.""Id_Usuario""=@uid";
                                (SELECT COALESCE(SUM(c.""Monto_Pagar""), 0) FROM ""Eventos_C_Cuentas_Cobrar"" c WHERE c.""Id_Asistente"" = b.""Id_Asistente"" AND c.""Pagado"" = FALSE) as ""MontoPendiente""
                         FROM ""Eventos_B_Asistentes"" b
                         JOIN ""Eventos_A_Registros"" r ON b.""Id_Registro"" = r.""Id_Registro""
+                        JOIN ""Eventos_Catalogo"" e ON r.""Id_Evento"" = e.""Id_Evento""
                         LEFT JOIN ""Eventos_Subtipos"" s ON b.""Id_Subtipo"" = s.""Id_Subtipo""
                         WHERE r.""Id_Evento"" = @idEv";
 
@@ -14332,6 +14441,9 @@ WHERE b.""Id_Asistente""=@idA AND r.""Id_Usuario""=@uid";
             decimal montoPendiente = reader["MontoPendiente"] != DBNull.Value ? Convert.ToDecimal(reader["MontoPendiente"]) : 0;
             string estadoPago = pagosHechos == totalPagos && totalPagos > 0 ? "LIQUIDADO" : (pagosHechos > 0 ? "ABONADO" : "DEUDA");
 
+            int idEncReq = reader["Id_Encuesta_Requisito"] != DBNull.Value ? Convert.ToInt32(reader["Id_Encuesta_Requisito"]) : 0;
+            bool encuestaRespondida = idEncReq == 0 || (reader["EncuestaRespondida"] != DBNull.Value && (bool)reader["EncuestaRespondida"]);
+
             return new
             {
                 idAsistente = reader["Id_Asistente"],
@@ -14342,7 +14454,8 @@ WHERE b.""Id_Asistente""=@idA AND r.""Id_Usuario""=@uid";
                 extras = reader["Extras"]?.ToString() ?? "Ninguno",
                 preguntas = reader["Preguntas"]?.ToString() ?? "Sin respuestas",
                 estadoPago = estadoPago,
-                montoPendiente = montoPendiente
+                montoPendiente = montoPendiente,
+                encuestaPendiente = !encuestaRespondida
             };
         }
 

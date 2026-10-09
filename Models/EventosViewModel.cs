@@ -286,6 +286,7 @@ namespace RedAJP.Models
     public class AgrupacionDeudaUsuario
     {
         public int IdRegistro { get; set; }
+        public int IdAsistente { get; set; }
         public string NombreAsistente { get; set; }
         public List<ItemDeudaPago> Pagos { get; set; } = new List<ItemDeudaPago>();
         public bool EstaTotalmentePagado { get; set; }
@@ -293,6 +294,7 @@ namespace RedAJP.Models
 
         // Nuevo: Para mostrar en qué modalidad está inscrito en el resumen de deuda
         public string NombreSubtipo { get; set; }
+        public bool EncuestaRespondida { get; set; } = true;
     }
 
     public class ItemDeudaPago
@@ -382,6 +384,7 @@ namespace RedAJP.Models
         public List<DetalleProductoExtraAsistente> ProductosExtra { get; set; } = new List<DetalleProductoExtraAsistente>();
         public bool EstaAsignadoAlojamiento { get; set; }
         public int SegundosRestantesApartado { get; set; }
+        public bool EncuestaRespondida { get; set; } = true;
     }
 
     public class DetalleProductoExtraAsistente
@@ -568,6 +571,8 @@ namespace RedAJP.Models
 
         // Caso 2: Sí hubo cobro extra / devolución (Tiene el concepto Numero_Pago = -1)
         public bool EsTraspasoConAjuste => TieneAjusteFinanciero;
+
+        public bool EncuestaRespondida { get; set; } = true;
 
         public List<PagoGestion> Pagos { get; set; } = new List<PagoGestion>();
     }

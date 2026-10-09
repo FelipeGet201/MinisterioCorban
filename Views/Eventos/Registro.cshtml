@@ -1,4 +1,4 @@
-@using RedAJP.Models
+﻿@using RedAJP.Models
 @using RedAJP.Globales
 @using Npgsql
 @inject Microsoft.Extensions.Configuration.IConfiguration Configuration
@@ -835,6 +835,26 @@
                                                             {
                                                                 <span class="badge badge-grupo rounded-pill mt-1">@item.EtiquetaGrupo</span>
                                                             }
+
+                                                            @if (ViewBag.TieneEncuestaRequisito == true)
+                                                            {
+                                                                if (item.EncuestaRespondida)
+                                                                {
+                                                                    <span class="badge bg-success bg-opacity-10 text-success border border-success rounded-pill px-2 py-1 mt-1 d-inline-block" style="font-size: 0.7rem;" title="Encuesta contestada">
+                                                                        <i class="fa-solid fa-clipboard-check me-1"></i> Encuesta Lista
+                                                                    </span>
+                                                                }
+                                                                else
+                                                                {
+                                                                    var linkEncuestaAsis = Url.Action("Responder", "Encuestas", new { clave = ViewBag.UrlEncuesta, asis = item.Id_Asistente, retorno = item.TokenExterno });
+                                                                    <span class="badge bg-danger bg-opacity-10 text-danger border border-danger rounded-pill px-2 py-1 mt-1 cursor-pointer d-inline-block" 
+                                                                          style="font-size: 0.7rem;" 
+                                                                          title="Encuesta pendiente de contestar"
+                                                                          onclick="mostrarAlertaEncuestaPendiente('@Html.Raw(item.NombreCompleto.Replace("'", "\\'"))', '@linkEncuestaAsis')">
+                                                                        <i class="fa-solid fa-clipboard-question me-1"></i> Encuesta Pendiente
+                                                                    </span>
+                                                                }
+                                                            }
                                                         </div>
                                                         @if (!item.EstaLiquidadado && !item.EstaBloqueado && item.PagosRealizados == 0 && item.SegundosRestantesApartado > 0)
                                                         {
@@ -913,9 +933,23 @@
                                                     <div class="d-flex justify-content-end">
                                                         @if (item.NombreCompleto != "(PENDIENTE)")
                                                         {
+                                                            var tieneEncuestaReq = (ViewBag.TieneEncuestaRequisito == true);
+                                                            var encRespondida = item.EncuestaRespondida;
+                                                            var linkEncuestaAsis = tieneEncuestaReq ? Url.Action("Responder", "Encuestas", new { clave = ViewBag.UrlEncuesta, asis = item.Id_Asistente, retorno = item.TokenExterno }) : "";
+
                                                             <a href="@Url.Action("Pagar", "Eventos", new { token = item.TokenExterno })" target="_blank" class="btn-accion ver" title="Ver Estado de Cuenta"><i class="fa-solid fa-eye"></i></a>
                                                             <button type="button" class="btn-accion share" title="Copiar Link" onclick="copiarLinkPago('@item.TokenExterno', '@item.NombreCompleto')"><i class="fa-solid fa-share-nodes"></i></button>
-                                                            <button type="button" class="btn-accion" style="color: #0d6efd;" title="Mostrar QR de Acceso" onclick="mostrarQR('@item.TokenExterno', '@Html.Raw(item.NombreCompleto.Replace("'", "\\'"))', @item.EstaLiquidadado.ToString().ToLower())"><i class="fa-solid fa-qrcode"></i></button>
+
+                                                            @if (tieneEncuestaReq && !encRespondida)
+                                                            {
+                                                                <button type="button" class="btn-accion" style="color: #dc3545;" title="Encuesta Pendiente (QR Bloqueado)" onclick="mostrarAlertaEncuestaPendiente('@Html.Raw(item.NombreCompleto.Replace("'", "\\'"))', '@linkEncuestaAsis')"><i class="fa-solid fa-qrcode"></i></button>
+                                                                <a href="@linkEncuestaAsis" target="_blank" class="btn-accion" style="color: #fd7e14;" title="Responder Encuesta"><i class="fa-solid fa-square-poll-vertical"></i></a>
+                                                                <button type="button" class="btn-accion share" style="color: #6f42c1;" title="Copiar Link de Encuesta" onclick="copiarLinkEncuesta('@linkEncuestaAsis', '@Html.Raw(item.NombreCompleto.Replace("'", "\\'"))')"><i class="fa-solid fa-link"></i></button>
+                                                            }
+                                                            else
+                                                            {
+                                                                <button type="button" class="btn-accion" style="color: #0d6efd;" title="Mostrar QR de Acceso" onclick="mostrarQR('@item.TokenExterno', '@Html.Raw(item.NombreCompleto.Replace("'", "\\'"))', @item.EstaLiquidadado.ToString().ToLower())"><i class="fa-solid fa-qrcode"></i></button>
+                                                            }
                                                         }
 
                                                         @if (!item.EstaBloqueado && !eventoBloqueado)
@@ -2248,8 +2282,67 @@
     }
 </script>
 
+    function mostrarAlertaEncuestaPendiente(nombre, linkEncuesta) {
+        var fullUrl = window.location.origin + linkEncuesta;
+        document.getElementById('modalEncuestaNombreAsistente').innerText = nombre;
+        document.getElementById('modalEncuestaBtnResponder').href = fullUrl;
+        document.getElementById('modalEncuestaBtnCopiar').onclick = function() {
+            navigator.clipboard.writeText(fullUrl).then(function() {
+                if (typeof mostrarMensaje === 'function') mostrarMensaje('Enlace Copiado', 'Link de encuesta para <b>' + nombre + '</b> copiado.', 'exito');
+                else Swal.fire({ icon: 'success', title: 'Copiado', text: 'Enlace copiado al portapapeles' });
+            });
+        };
+        new bootstrap.Modal(document.getElementById('modalEncuestaPendiente')).show();
+    }
+
+    function copiarLinkEncuesta(linkRelativo, nombre) {
+        var fullUrl = window.location.origin + linkRelativo;
+        navigator.clipboard.writeText(fullUrl).then(function() {
+            if (typeof mostrarMensaje === 'function') mostrarMensaje('Enlace Copiado', 'Link de encuesta para <b>' + nombre + '</b> copiado.', 'exito');
+            else Swal.fire({ icon: 'success', title: 'Copiado', text: 'Enlace copiado al portapapeles' });
+        }).catch(function() {
+            prompt('Copia este enlace de encuesta para ' + nombre + ':', fullUrl);
+        });
+    }
+
 <!-- Librería para generar el QR al vuelo -->
 <script src="~/lib/qrcode/qrcode.min.js"></script>
+
+<!-- Modal Encuesta Pendiente -->
+<div class="modal fade" id="modalEncuestaPendiente" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content rounded-4 border-0 shadow">
+            <div class="modal-header border-0 pb-0">
+                <div class="d-flex align-items-center gap-2">
+                    <div class="rounded-circle bg-warning bg-opacity-10 p-2 text-warning d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
+                        <i class="fa-solid fa-clipboard-question fa-lg"></i>
+                    </div>
+                    <h5 class="fw-bold mb-0 text-dark">Encuesta Pendiente</h5>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body py-4">
+                <p class="text-secondary mb-3">
+                    El asistente <strong id="modalEncuestaNombreAsistente" class="text-dark"></strong> aún no ha completado la encuesta requerida para este evento.
+                </p>
+                <div class="alert alert-light border rounded-3 p-3 small mb-3 text-muted">
+                    <i class="fa-solid fa-shield-halved me-1"></i> El <strong>Código QR de Acceso</strong> y los <strong>Recibos de Pago</strong> estarán disponibles una vez completada la encuesta.
+                </div>
+                <div class="d-flex flex-column gap-2">
+                    <a id="modalEncuestaBtnResponder" href="#" target="_blank" class="btn btn-warning text-dark fw-bold rounded-pill py-2 shadow-sm">
+                        <i class="fa-solid fa-pen-to-square me-2"></i>Contestar Encuesta Ahora
+                    </a>
+                    <button type="button" id="modalEncuestaBtnCopiar" class="btn btn-outline-secondary rounded-pill py-2 small fw-semibold">
+                        <i class="fa-solid fa-copy me-2"></i>Copiar Enlace de Encuesta
+                    </button>
+                </div>
+            </div>
+            <div class="modal-footer border-0 pt-0">
+                <button type="button" class="btn btn-light rounded-pill w-100 fw-bold" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
 
 <!-- Modal QR -->
 <div class="modal fade" id="modalQR" tabindex="-1" aria-hidden="true">

@@ -28,7 +28,7 @@
         <h2 class="fw-bold text-dark mb-2">¡Misión Cumplida!</h2>
 
         <p class="text-muted fs-5 mb-4">
-            Hola <strong>@(Model.NombreUsuarioLogueado ?? "Usuario")</strong>,<br>
+            Hola <strong>@(Model.NombreAsistente ?? Model.NombreUsuarioLogueado ?? "Asistente")</strong>,<br>
             ya tenemos registradas tus respuestas para:
         </p>
 
@@ -51,6 +51,19 @@
         </p>
 
         <div class="d-grid gap-2 col-md-8 mx-auto">
+            @if (!string.IsNullOrEmpty(ViewBag.Retorno as string) || !string.IsNullOrEmpty(ViewBag.TokenAsistente as string) || !string.IsNullOrEmpty(Model.Retorno) || !string.IsNullOrEmpty(Model.TokenAsistente))
+            {
+                var tokenRetorno = (ViewBag.Retorno as string) ?? (ViewBag.TokenAsistente as string) ?? Model.Retorno ?? Model.TokenAsistente;
+                <a href="@Url.Action("Pagar", "Eventos", new { token = tokenRetorno })" class="btn btn-success rounded-pill py-3 fw-bold shadow-sm hover-scale transition-fast">
+                    <i class="fa-solid fa-receipt me-2"></i> Ir a Mis Pagos y Comprobantes
+                </a>
+            }
+            else if (!string.IsNullOrEmpty(Model.IdEventoRetorno))
+            {
+                <a href="@Url.Action("Detalle", "Eventos", new { sid = Model.IdEventoRetorno })" class="btn btn-primary rounded-pill py-3 fw-bold shadow-sm hover-scale transition-fast">
+                    <i class="fa-solid fa-arrow-left me-2"></i> Volver al Evento
+                </a>
+            }
             <a href="/" class="btn btn-dark rounded-pill py-3 fw-bold shadow-sm hover-scale transition-fast">
                 <i class="fa-solid fa-house me-2"></i> Volver al Inicio
             </a>

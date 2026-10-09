@@ -1,4 +1,4 @@
-using ClosedXML.Excel;
+﻿using ClosedXML.Excel;
 using DocumentFormat.OpenXml.Drawing.Charts;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
@@ -547,7 +547,7 @@ namespace RedAJP.Controllers
         /// estado y duplicidad necesarias para garantizar una experiencia segura y consistente para el usuario final.</returns>
         [AllowAnonymous]
         [Route("E/{clave}")]
-        public async Task<IActionResult> Responder(string clave, [FromQuery] string evt = null)
+        public async Task<IActionResult> Responder(string clave, [FromQuery] string evt = null, [FromQuery] int? asis = null, [FromQuery] string retorno = null)
         {
             // Ejecutamos barrido antes de cargar la encuesta para garantizar que el estado esté correcto incluso si nadie entra al admin       
             bool mantenimientoOk = await ActualizarEstadosVencidos();
@@ -560,6 +560,8 @@ namespace RedAJP.Controllers
 
             var modelo = new EncuestaResponderViewModel();
             modelo.IdEventoRetorno = evt;
+            modelo.ClaveUrl = clave;
+            modelo.Retorno = retorno;
             bool activa = false;
             bool esPrivada = false;
             int? idGrupoAcceso = null;
@@ -595,6 +597,72 @@ namespace RedAJP.Controllers
                     }
 
                     if (!activa) return View("EncuestaCerrada", modelo);
+
+                    // 1.5 Validar si la encuesta es requisito de algún evento activo
+                    int idEventoAsociado = 0;
+                    string sqlEvtReq = @"SELECT e.""Id_Evento"" FROM ""Eventos_Catalogo"" e WHERE e.""Id_Encuesta_Requisito"" = @idEnc AND e.""Activo"" = TRUE LIMIT 1";
+                    using (var cmdEvt = new NpgsqlCommand(sqlEvtReq, con))
+                    {
+                        cmdEvt.Parameters.AddWithValue("@idEnc", idEncuesta);
+                        var resEvt = await cmdEvt.ExecuteScalarAsync();
+                        if (resEvt != null && resEvt != DBNull.Value) idEventoAsociado = Convert.ToInt32(resEvt);
+                    }
+
+                    // 1.6 Validación del Asistente (Parámetro asis o ingreso manual)
+                    if (asis.HasValue && asis.Value > 0)
+                    {
+                        string sqlAsis = @"SELECT b.""Id_Asistente"", b.""Nombre_Completo"", b.""Token_Pago_Externo"", r.""Id_Evento"" 
+                                           FROM ""Eventos_B_Asistentes"" b 
+                                           JOIN ""Eventos_A_Registros"" r ON b.""Id_Registro"" = r.""Id_Registro"" 
+                                           JOIN ""Eventos_Catalogo"" e ON r.""Id_Evento"" = e.""Id_Evento""
+                                           WHERE b.""Id_Asistente"" = @asis AND e.""Id_Encuesta_Requisito"" = @idEnc LIMIT 1";
+                        using (var cmdAsis = new NpgsqlCommand(sqlAsis, con))
+                        {
+                            cmdAsis.Parameters.AddWithValue("@asis", asis.Value);
+                            cmdAsis.Parameters.AddWithValue("@idEnc", idEncuesta);
+                            using (var rAsis = await cmdAsis.ExecuteReaderAsync())
+                            {
+                                if (await rAsis.ReadAsync())
+                                {
+                                    modelo.IdAsistenteEvento = (int)rAsis["Id_Asistente"];
+                                    modelo.NombreAsistente = rAsis["Nombre_Completo"].ToString();
+                                    modelo.TokenAsistente = rAsis["Token_Pago_Externo"].ToString();
+                                    modelo.PedirDatosIdentidad = false;
+                                }
+                                else
+                                {
+                                    modelo.ErrorClave = $"No se encontró ningún asistente registrado con el ID #{asis.Value} para este evento.";
+                                    modelo.RequiereClaveManual = true;
+                                }
+                            }
+                        }
+
+                        // Si encontramos al asistente, verificar si ya respondió su encuesta
+                        if (modelo.IdAsistenteEvento.HasValue)
+                        {
+                            string sqlDupAsis = @"SELECT ""Id_Respuesta"" FROM ""Encuestas_Respuestas_Header"" 
+                                                  WHERE ""Id_Encuesta"" = @id AND ""Id_Asistente_Evento"" = @asId LIMIT 1";
+                            using (var cmdDupAsis = new NpgsqlCommand(sqlDupAsis, con))
+                            {
+                                cmdDupAsis.Parameters.AddWithValue("@id", idEncuesta);
+                                cmdDupAsis.Parameters.AddWithValue("@asId", modelo.IdAsistenteEvento.Value);
+                                var objRespAsis = await cmdDupAsis.ExecuteScalarAsync();
+                                if (objRespAsis != null)
+                                {
+                                    ViewBag.Folio = ((int)objRespAsis).ToString("D6");
+                                    ViewBag.EsAnonima = modelo.EsAnonima;
+                                    ViewBag.TokenAsistente = modelo.TokenAsistente;
+                                    ViewBag.Retorno = modelo.Retorno;
+                                    return View("EncuestaResuelta", modelo);
+                                }
+                            }
+                        }
+                    }
+                    else if (idEventoAsociado > 0)
+                    {
+                        // La encuesta es de un evento activo y no viene asistente especificado: pedir ID como clave de acceso
+                        modelo.RequiereClaveManual = true;
+                    }
 
                     // Cargar lista de iglesias si la encuesta lo requiere ---
                     if (modelo.SolicitarIglesia)
@@ -633,9 +701,12 @@ namespace RedAJP.Controllers
                         if (claim != null && int.TryParse(claim.Value, out int uid)) idUsuario = uid;
 
                         modelo.NombreUsuarioLogueado = User.Identity.Name;
-                        modelo.PedirDatosIdentidad = false;
+                        if (!modelo.IdAsistenteEvento.HasValue)
+                        {
+                            modelo.PedirDatosIdentidad = false;
+                        }
 
-                        // --- NUEVO: EXTRAER IGLESIA ASIGNADA DEL USUARIO ---
+                        // --- EXTRAER IGLESIA ASIGNADA DEL USUARIO ---
                         if (idUsuario.HasValue && modelo.SolicitarIglesia)
                         {
                             string sqlUserIg = "SELECT \"Id_Iglesia_Asignada\" FROM \"Sist_Usuarios\" WHERE \"Id_Usuario\"=@uid";
@@ -653,28 +724,31 @@ namespace RedAJP.Controllers
                             }
                         }
 
-                        // A) VALIDACIÓN DE DUPLICIDAD 
-                        string sqlDup = "SELECT \"Id_Respuesta\" FROM \"Encuestas_Respuestas_Header\" WHERE \"Id_Encuesta\"=@id AND \"Id_Usuario\"=@uid LIMIT 1";
-                        using (var cmd = new NpgsqlCommand(sqlDup, con))
+                        // VALIDACIÓN DE DUPLICIDAD (Solo si no es de asistente o si no se validó ya por asistente)
+                        if (!modelo.IdAsistenteEvento.HasValue)
                         {
-                            cmd.Parameters.AddWithValue("@id", idEncuesta);
-                            cmd.Parameters.AddWithValue("@uid", idUsuario.Value);
-                            var objRespuesta = await cmd.ExecuteScalarAsync();
-                            if (objRespuesta != null)
+                            string sqlDup = "SELECT \"Id_Respuesta\" FROM \"Encuestas_Respuestas_Header\" WHERE \"Id_Encuesta\"=@id AND \"Id_Usuario\"=@uid LIMIT 1";
+                            using (var cmd = new NpgsqlCommand(sqlDup, con))
                             {
-                                ViewBag.Folio = ((int)objRespuesta).ToString("D6");
-                                ViewBag.EsAnonima = modelo.EsAnonima;
-                                return View("EncuestaResuelta", modelo);
+                                cmd.Parameters.AddWithValue("@id", idEncuesta);
+                                cmd.Parameters.AddWithValue("@uid", idUsuario.Value);
+                                var objRespuesta = await cmd.ExecuteScalarAsync();
+                                if (objRespuesta != null)
+                                {
+                                    ViewBag.Folio = ((int)objRespuesta).ToString("D6");
+                                    ViewBag.EsAnonima = modelo.EsAnonima;
+                                    return View("EncuestaResuelta", modelo);
+                                }
                             }
                         }
                     }
                     else
                     {
-                        modelo.PedirDatosIdentidad = !modelo.EsAnonima;
+                        modelo.PedirDatosIdentidad = !modelo.EsAnonima && !modelo.IdAsistenteEvento.HasValue;
                     }
 
-                    // B) Validación de Privacidad
-                    if (esPrivada)
+                    // B) Validación de Privacidad (El token/Id de asistente exime de login privado)
+                    if (esPrivada && !modelo.IdAsistenteEvento.HasValue)
                     {
                         if (!estaLogueado) return RedirectToAction("Index", "Login", new { returnUrl = $"/E/{clave}" });
 
@@ -860,6 +934,14 @@ namespace RedAJP.Controllers
             string nombreExt = form["NombreExterno"];
             string emailExt = form["EmailExterno"];
 
+            // Identificador de asistente si la encuesta proviene de un registro a evento
+            int? idAsistenteEvento = null;
+            if (int.TryParse(form["IdAsistenteEvento"], out int asisVal) && asisVal > 0)
+                idAsistenteEvento = asisVal;
+
+            string tokenAsistente = form["TokenAsistente"];
+            string retorno = form["retorno"];
+
             // Capturar Iglesia Seleccionada si aplica
             int? idIglesiaSeleccionada = null;
             if (int.TryParse(form["IdIglesiaSeleccionada"], out int igId))
@@ -893,9 +975,9 @@ namespace RedAJP.Controllers
                     // ----------------------------------------------------------------------------------
                     // 2. CONTEXTO DE LA ENCUESTA (CARGA Y VALIDACIÓN DE ESTADO)
                     // ----------------------------------------------------------------------------------
-                    var config = new { Activa = false, FechaLimite = (DateTime?)null, EsPrivada = false, IdGrupo = (int?)null, EsAnonima = false, ClaveUrl = "", SolicitarIglesia = false };
+                    var config = new { Activa = false, FechaLimite = (DateTime?)null, EsPrivada = false, IdGrupo = (int?)null, EsAnonima = false, ClaveUrl = "", SolicitarIglesia = false, Titulo = "" };
 
-                    string sqlConf = @"SELECT ""Activa"", ""Fecha_Limite"", ""Es_Privada"", ""Id_Grupo_Acceso"", ""Es_Anonima"", ""Clave_Url"", ""Solicitar_Iglesia"" 
+                    string sqlConf = @"SELECT ""Activa"", ""Fecha_Limite"", ""Es_Privada"", ""Id_Grupo_Acceso"", ""Es_Anonima"", ""Clave_Url"", ""Solicitar_Iglesia"", ""Titulo"" 
                                FROM ""Encuestas_Catalogo"" WHERE ""Id_Encuesta"" = @id";
 
                     using (var cmd = new NpgsqlCommand(sqlConf, con))
@@ -913,7 +995,8 @@ namespace RedAJP.Controllers
                                     IdGrupo = r["Id_Grupo_Acceso"] as int?,
                                     EsAnonima = (bool)r["Es_Anonima"],
                                     ClaveUrl = r["Clave_Url"].ToString(),
-                                    SolicitarIglesia = r["Solicitar_Iglesia"] != DBNull.Value ? (bool)r["Solicitar_Iglesia"] : false
+                                    SolicitarIglesia = r["Solicitar_Iglesia"] != DBNull.Value ? (bool)r["Solicitar_Iglesia"] : false,
+                                    Titulo = r["Titulo"]?.ToString() ?? ""
                                 };
                             }
                             else
@@ -943,11 +1026,36 @@ namespace RedAJP.Controllers
                         return RedirectToAction("Responder", new { clave = config.ClaveUrl });
                     }
 
+                    // Si viene de un asistente de evento, recuperar su nombre y correo si no fueron enviados en el formulario
+                    if (idAsistenteEvento.HasValue)
+                    {
+                        string sqlDatosAsis = @"SELECT b.""Nombre_Completo"", COALESCE(b.""Correo_Externo"", u.""Email"") AS ""Email_Asistente"", b.""Token_Pago_Externo"" 
+                                               FROM ""Eventos_B_Asistentes"" b 
+                                               JOIN ""Eventos_A_Registros"" r ON b.""Id_Registro"" = r.""Id_Registro"" 
+                                               LEFT JOIN ""Sist_Usuarios"" u ON r.""Id_Usuario"" = u.""Id_Usuario"" 
+                                               WHERE b.""Id_Asistente"" = @asId LIMIT 1";
+                        using (var cmdNom = new NpgsqlCommand(sqlDatosAsis, con))
+                        {
+                            cmdNom.Parameters.AddWithValue("@asId", idAsistenteEvento.Value);
+                            using (var rNom = await cmdNom.ExecuteReaderAsync())
+                            {
+                                if (await rNom.ReadAsync())
+                                {
+                                    if (string.IsNullOrWhiteSpace(nombreExt)) nombreExt = rNom["Nombre_Completo"]?.ToString();
+                                    if (string.IsNullOrWhiteSpace(emailExt)) emailExt = rNom["Email_Asistente"]?.ToString();
+                                    if (string.IsNullOrWhiteSpace(tokenAsistente)) tokenAsistente = rNom["Token_Pago_Externo"]?.ToString();
+                                }
+                            }
+                        }
+                        if (string.IsNullOrWhiteSpace(emailExt)) emailExt = "asistente@corban.com";
+                        if (string.IsNullOrWhiteSpace(retorno) && !string.IsNullOrWhiteSpace(tokenAsistente)) retorno = tokenAsistente;
+                    }
+
                     // ----------------------------------------------------------------------------------
                     // 3. VALIDACIÓN DE IDENTIDAD (ANONIMATO)
                     // ----------------------------------------------------------------------------------
                     // Si la encuesta NO es anónima y el usuario es externo (no logueado), Nombre y Email son OBLIGATORIOS.
-                    if (!config.EsAnonima && !idUsuario.HasValue)
+                    if (!config.EsAnonima && !idUsuario.HasValue && !idAsistenteEvento.HasValue)
                     {
                         if (string.IsNullOrWhiteSpace(nombreExt) || string.IsNullOrWhiteSpace(emailExt))
                         {
@@ -959,7 +1067,7 @@ namespace RedAJP.Controllers
                     // ----------------------------------------------------------------------------------
                     // 4. VALIDACIÓN DE PERMISOS (PRIVACIDAD / GRUPOS)
                     // ----------------------------------------------------------------------------------
-                    if (config.EsPrivada)
+                    if (config.EsPrivada && !idAsistenteEvento.HasValue)
                     {
                         if (!idUsuario.HasValue) return Unauthorized(); // Debe loguearse
                         if (config.IdGrupo.HasValue)
@@ -986,7 +1094,14 @@ namespace RedAJP.Controllers
                     string sqlDuplicado = "";
 
                     // Modificado para recuperar Id_Respuesta en caso de que ya exista y poder mostrarle el folio de nuevo
-                    if (idUsuario.HasValue)
+                    if (idAsistenteEvento.HasValue)
+                    {
+                        sqlDuplicado = @"SELECT ""Id_Respuesta"" FROM ""Encuestas_Respuestas_Header"" 
+                                         WHERE ""Id_Encuesta""=@id AND ""Id_Asistente_Evento""=@asId LIMIT 1";
+                        cmdDup.Parameters.AddWithValue("@asId", idAsistenteEvento.Value);
+                        checarDuplicado = true;
+                    }
+                    else if (idUsuario.HasValue)
                     {
                         sqlDuplicado = "SELECT \"Id_Respuesta\" FROM \"Encuestas_Respuestas_Header\" WHERE \"Id_Encuesta\"=@id AND \"Id_Usuario\"=@uid LIMIT 1";
                         cmdDup.Parameters.AddWithValue("@uid", idUsuario.Value);
@@ -1012,7 +1127,16 @@ namespace RedAJP.Controllers
                             int idRespExistente = (int)objExiste;
                             ViewBag.Folio = idRespExistente.ToString("D6");
                             ViewBag.EsAnonima = config.EsAnonima;
-                            return View("EncuestaResuelta", new RedAJP.Models.EncuestaResponderViewModel { Titulo = "Ya respondiste", NombreUsuarioLogueado = nombreExt ?? "Usuario" });
+                            ViewBag.TokenAsistente = tokenAsistente;
+                            ViewBag.Retorno = retorno;
+                            return View("EncuestaResuelta", new RedAJP.Models.EncuestaResponderViewModel 
+                            { 
+                                Titulo = !string.IsNullOrEmpty(config.Titulo) ? config.Titulo : config.ClaveUrl, 
+                                NombreAsistente = nombreExt,
+                                NombreUsuarioLogueado = nombreExt ?? "Usuario",
+                                TokenAsistente = tokenAsistente,
+                                Retorno = retorno
+                            });
                         }
                     }
 
@@ -1178,8 +1302,8 @@ namespace RedAJP.Controllers
 
                             // A. Insertar Encabezado
                             string sqlH = @"INSERT INTO ""Encuestas_Respuestas_Header"" 
-                                  (""Id_Encuesta"", ""Fecha"", ""Id_Usuario"", ""Nombre_Externo"", ""Email_Externo"", ""Id_Iglesia_Seleccionada"") 
-                                  VALUES (@id, NOW(), @uid, @nom, @mail, @idig) RETURNING ""Id_Respuesta""";
+                                  (""Id_Encuesta"", ""Fecha"", ""Id_Usuario"", ""Nombre_Externo"", ""Email_Externo"", ""Id_Iglesia_Seleccionada"", ""Id_Asistente_Evento"") 
+                                  VALUES (@id, NOW(), @uid, @nom, @mail, @idig, @asId) RETURNING ""Id_Respuesta""";
 
                             using (var cmd = new NpgsqlCommand(sqlH, con, trans))
                             {
@@ -1187,7 +1311,8 @@ namespace RedAJP.Controllers
                                 cmd.Parameters.AddWithValue("@uid", (object)idUsuario ?? DBNull.Value);
                                 cmd.Parameters.AddWithValue("@nom", (object)nombreExt ?? DBNull.Value);
                                 cmd.Parameters.AddWithValue("@mail", (object)emailExt ?? DBNull.Value);
-                                cmd.Parameters.AddWithValue("@idig", (object)idIglesiaSeleccionada ?? DBNull.Value); // NUEVO
+                                cmd.Parameters.AddWithValue("@idig", (object)idIglesiaSeleccionada ?? DBNull.Value);
+                                cmd.Parameters.AddWithValue("@asId", (object)idAsistenteEvento ?? DBNull.Value); // NUEVO
                                 idRespuestaGenerada = (int)await cmd.ExecuteScalarAsync();
                             }
 
@@ -1289,8 +1414,11 @@ namespace RedAJP.Controllers
                     }
 
                     // Todo salió bien, pasamos las propiedades a la vista de éxito
-                    ViewBag.Folio = idRespuestaGenerada.ToString("D6"); // <--- GENERACIÓN DEL FOLIO
-                    ViewBag.EsAnonima = config.EsAnonima;               // <--- BANDERA DE ANONIMATO
+                    ViewBag.Folio = idRespuestaGenerada.ToString("D6");
+                    ViewBag.EsAnonima = config.EsAnonima;
+                    ViewBag.TokenAsistente = tokenAsistente;
+                    ViewBag.IdAsistenteEvento = idAsistenteEvento;
+                    ViewBag.Retorno = retorno;
                     
                     if (form.ContainsKey("evt") && !string.IsNullOrEmpty(form["evt"]))
                     {
