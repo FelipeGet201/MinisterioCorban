@@ -78,11 +78,11 @@
                                 <div class="d-flex flex-wrap gap-1">
                                     @foreach (var mod in item.ModulosAcceso.Take(4))
                                     {
-                                        <span class="badge bg-primary bg-opacity-10 text-primary fw-normal border border-primary border-opacity-10">@mod</span>
+                                        <span class="badge badge-acceso">@mod</span>
                                     }
                                     @if (item.ModulosAcceso.Count > 4)
                                     {
-                                        <span class="badge bg-light text-muted border">+@(item.ModulosAcceso.Count - 4)</span>
+                                        <span class="badge badge-acceso-mas">+@(item.ModulosAcceso.Count - 4)</span>
                                     }
                                 </div>
                             }
@@ -99,7 +99,7 @@
                             <div>
                                 @if (p_Editar)
                                 {
-                                    <a href="@Url.Action("Editor", "Roles", new { id = item.Id_Rol })" class="btn btn-sm btn-light text-primary border rounded-circle" title="Editar">
+                                    <a href="@Url.Action("Editor", "Roles", new { id = item.Id_Rol })" class="btn btn-sm btn-accion-rol" title="Editar">
                                         <i class="fa-solid fa-pen"></i>
                                     </a>
                                 }
@@ -144,4 +144,48 @@
         -webkit-box-orient: vertical;
         overflow: hidden;
     }
+
+    /* Badges de Accesos con alto contraste legible */
+    .badge-acceso {
+        background-color: #E6F4F1 !important;
+        color: #074C40 !important;
+        border: 1px solid #B2DED4 !important;
+        font-size: 0.72rem !important;
+        font-weight: 600 !important;
+        padding: 0.35em 0.75em !important;
+        border-radius: 50rem !important;
+        letter-spacing: 0.01em;
+        line-height: 1.3;
+    }
+
+    .badge-acceso-mas {
+        background-color: #F1F3F5 !important;
+        color: #374151 !important;
+        border: 1px solid #D1D5DB !important;
+        font-size: 0.72rem !important;
+        font-weight: 700 !important;
+        padding: 0.35em 0.65em !important;
+        border-radius: 50rem !important;
+        line-height: 1.3;
+    }
+
+    .btn-accion-rol {
+        width: 32px;
+        height: 32px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background-color: #F8FAFC;
+        color: var(--header-footer, #0A3A35);
+        border: 1px solid #E2E8F0;
+        border-radius: 50%;
+        transition: all 0.2s ease;
+    }
+
+        .btn-accion-rol:hover {
+            background-color: var(--header-footer, #0A3A35);
+            color: #FFFFFF !important;
+            border-color: var(--header-footer, #0A3A35);
+            transform: scale(1.05);
+        }
 </style>

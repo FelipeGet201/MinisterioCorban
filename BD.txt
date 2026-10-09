@@ -944,6 +944,36 @@ INSERT INTO "Sist_Modulos" ("Nombre_Clave", "Nombre_Visible", "Orden_Visual", "V
 ('Rec_Materiales', 'Material Evangelistico', 70, TRUE, TRUE),
 ('Visitas', 'Reporte de Trafico', 100, TRUE, TRUE);
 
+-- 1. Insertar ÚNICAMENTE los módulos reales que usa este proyecto
+INSERT INTO "Sist_Modulos" ("Nombre_Clave", "Nombre_Visible", "Orden_Visual", "VisibleRoles", "Activo")
+SELECT v."Nombre_Clave", v."Nombre_Visible", v."Orden_Visual", v."VisibleRoles", v."Activo"
+FROM (VALUES
+    ('Seguridad_Roles', 'Perfiles y Roles',       15,  TRUE, TRUE),
+    ('Grupos',          'Grupos de Usuarios',     20,  TRUE, TRUE),
+    ('AlertasCorreos',  'Correos de Alerta',      45,  TRUE, TRUE),
+    ('CuentasStripe',   'Pasarelas Stripe',       50,  TRUE, TRUE),
+    ('Estadisticas',    'Estadísticas',           55,  TRUE, TRUE),
+    ('Biblioteca',      'Biblioteca',             75,  TRUE, TRUE),
+    ('Encuestas',       'Encuestas',              80,  TRUE, TRUE),
+    ('GeneradorQR',     'Generador QR',           85,  TRUE, TRUE),
+    ('Cupones',         'Cupones de Descuento',   90,  TRUE, TRUE),
+    ('Colores',         'Catálogo de Colores',    95,  TRUE, TRUE),
+    ('Comunidad',       'Comunidad',              110, TRUE, TRUE)
+) AS v("Nombre_Clave", "Nombre_Visible", "Orden_Visual", "VisibleRoles", "Activo")
+WHERE NOT EXISTS (
+    SELECT 1 FROM "Sist_Modulos" m WHERE m."Nombre_Clave" = v."Nombre_Clave"
+);
+
+-- 2. Otorgar todos los permisos a tu rol (Id_Rol = 1) para los módulos nuevos
+INSERT INTO "Sist_Permisos" ("Id_Rol", "Id_Modulo", "P_Leer", "P_Crear", "P_Editar", "P_Borrar", "P_Admin")
+SELECT 1, m."Id_Modulo", TRUE, TRUE, TRUE, TRUE, TRUE
+FROM "Sist_Modulos" m
+WHERE NOT EXISTS (
+    SELECT 1 FROM "Sist_Permisos" p 
+    WHERE p."Id_Rol" = 1 AND p."Id_Modulo" = m."Id_Modulo"
+);
+
+
 -- C. USUARIO SUPERADMIN
 INSERT INTO "Sist_Usuarios" 
 ("NombreCompleto", "Nombre_Usuario", "Email", "PasswordHash", "Telefono", "Id_Rol", "Activo", "Email_Verificado") 
@@ -983,3 +1013,31 @@ INSERT INTO "Sist_Comunidad_Tipos_Mensaje" ("Clave", "Nombre", "Icono", "Solo_Di
 ('Sugerencia', 'Sugerencia', 'fa-lightbulb', TRUE),
 ('Queja', 'Queja', 'fa-triangle-exclamation', TRUE),
 ('Visita', 'Solicitud de Visita', 'fa-house-chimney-user', TRUE);
+
+-- ============================================================================
+-- SCRIPT DE MIGRACIÓN: COLUMNA Id_Asistente_Evento EN ENCUESTAS
+-- Motor: PostgreSQL
+-- Tabla afectada: "Encuestas_Respuestas_Header"
+-- ============================================================================
+
+-- 1. Agregar la columna Id_Asistente_Evento
+ALTER TABLE "Encuestas_Respuestas_Header" 
+ADD COLUMN IF NOT EXISTS "Id_Asistente_Evento" INTEGER NULL;
+
+-- 2. Clave foránea opcional hacia Eventos_B_Asistentes
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'FK_Encuestas_Respuestas_Asistente_Evento'
+    ) THEN
+        ALTER TABLE "Encuestas_Respuestas_Header"
+        ADD CONSTRAINT "FK_Encuestas_Respuestas_Asistente_Evento"
+        FOREIGN KEY ("Id_Asistente_Evento") 
+        REFERENCES "Eventos_B_Asistentes"("Id_Asistente")
+        ON DELETE SET NULL;
+    END IF;
+END $$;
+
+-- 3. Índice para optimizar la verificación instantánea de encuestas
+CREATE INDEX IF NOT EXISTS "IX_Encuestas_Respuestas_Asistente_Evento" 
+ON "Encuestas_Respuestas_Header" ("Id_Encuesta", "Id_Asistente_Evento");
