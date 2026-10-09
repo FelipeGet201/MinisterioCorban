@@ -3175,6 +3175,7 @@ WHERE b.""Id_Asistente""=@idA AND r.""Id_Usuario""=@uid";
                                 claveEncuestaPagar = r["ClaveEncuesta"]?.ToString();
                                 ViewBag.TieneEncuestaRequisito = idEncRequisitoPagar > 0;
                                 ViewBag.ClaveEncuesta = claveEncuestaPagar;
+                                ViewBag.UrlEncuesta = claveEncuestaPagar;
                                 ViewBag.IdEncuestaRequisito = idEncRequisitoPagar;
 
                                 // Pasamos la imagen a la vista para el efecto de la tarjeta difuminada

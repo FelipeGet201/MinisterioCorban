@@ -242,7 +242,7 @@ else
     <form id="surveyForm" method="post" action="@Url.Action("Finalizar")" enctype="multipart/form-data">
         @Html.AntiForgeryToken()
         <input type="hidden" name="IdEncuesta" value="@Model.Id" />
-        <input type="hidden" name="ClaveUrl" value="@ViewContext.RouteData.Values["clave"]" />
+        <input type="hidden" name="ClaveUrl" value="@(Model.ClaveUrl ?? ViewContext.RouteData.Values["clave"])" />
         <input type="hidden" name="evt" value="@Model.IdEventoRetorno" />
         <input type="hidden" name="IdAsistenteEvento" value="@Model.IdAsistenteEvento" />
         <input type="hidden" name="TokenAsistente" value="@Model.TokenAsistente" />
