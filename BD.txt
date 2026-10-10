@@ -1053,3 +1053,6 @@ DROP COLUMN IF EXISTS "Id_Iglesia_Seleccionada";
 -- 3. (Opcional) Si también deseas limpiar la columna residual en usuarios:
 ALTER TABLE "Sist_Usuarios" 
 DROP COLUMN IF EXISTS "Id_Iglesia_Asignada";
+
+ALTER TABLE "Eventos_D_Transacciones" 
+ADD COLUMN IF NOT EXISTS "Fecha_Proceso" TIMESTAMP NULL;
